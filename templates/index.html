@@ -21,7 +21,7 @@
             <div class="col-md-2">
                 <select class="form-select search-input" name="status">
                     <option value="">所有状态</option>
-                    <option value="未完成" {% if status_filter == '未完成' %}selected{% endif %}>未完成</option>
+                    <option value="未完成" {% if status_filter == '未完成' or not status_filter %}selected{% endif %}>未完成</option>
                     <option value="已完成" {% if status_filter == '已完成' %}selected{% endif %}>已完成</option>
                 </select>
             </div>
@@ -37,6 +37,22 @@
                 <button type="button" class="btn btn-secondary w-100" onclick="resetSearch()">
                     <i class="bi bi-arrow-counterclockwise"></i> 重置
                 </button>
+            </div>
+            
+            <!-- 排序选项 -->
+            <div class="col-md-4">
+                <select class="form-select search-input" name="sort_by" id="sort_by">
+                    <option value="created_at" {% if sort_by == 'created_at' %}selected{% endif %}>按创建时间排序</option>
+                    <option value="priority" {% if sort_by == 'priority' %}selected{% endif %}>按优先级排序</option>
+                    <option value="expected_time" {% if sort_by == 'expected_time' %}selected{% endif %}>按预期时间排序</option>
+                    <option value="total_time" {% if sort_by == 'total_time' %}selected{% endif %}>按专注时长排序</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select search-input" name="sort_order" id="sort_order">
+                    <option value="desc" {% if sort_order == 'desc' %}selected{% endif %}>降序</option>
+                    <option value="asc" {% if sort_order == 'asc' %}selected{% endif %}>升序</option>
+                </select>
             </div>
         </form>
     </div>
@@ -272,9 +288,17 @@ $.fn.select2.amd.define('CustomSelectionAdapter', [
 function resetSearch() {
     const inputs = document.querySelectorAll('.search-input');
     inputs.forEach(input => {
-        input.value = '';
+        if (input.name === 'sort_by') {
+            input.value = 'created_at'; // 重置为默认排序字段
+        } else if (input.name === 'sort_order') {
+            input.value = 'desc'; // 重置为默认排序顺序
+        } else if (input.name === 'status') {
+            input.value = '未完成'; // 重置为默认只显示未完成任务
+        } else {
+            input.value = '';
+        }
     });
-    window.location.href = window.location.pathname;
+    window.location.href = window.location.pathname + '?status=未完成'; // 重定向时保持显示未完成任务
 }
 
 function debounce(func, wait) {

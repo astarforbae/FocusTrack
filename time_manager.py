@@ -129,6 +129,7 @@ class TimeManager:
     def __init__(self):
         self.tasks = []
         self.data_file = "tasks.json"
+        self.tasks_hash = None  # 添加哈希值用于检测更改
         self.load_tasks()
 
     def pad_str(self, s, width):
@@ -236,8 +237,15 @@ class TimeManager:
             print(f"{Fore.RED}无效的任务序号{Style.RESET_ALL}")
 
     def save_tasks(self):
-        with open(self.data_file, "w", encoding="utf-8") as f:
-            json.dump([task.to_dict() for task in self.tasks], f, ensure_ascii=False, indent=2)
+        # 生成当前任务数据的哈希值
+        tasks_data = [task.to_dict() for task in self.tasks]
+        current_hash = hash(json.dumps(tasks_data, sort_keys=True))
+        
+        # 只有当哈希值不同时（数据有变化）才写入文件
+        if current_hash != self.tasks_hash:
+            with open(self.data_file, "w", encoding="utf-8") as f:
+                json.dump(tasks_data, f, ensure_ascii=False, indent=2)
+            self.tasks_hash = current_hash
 
     def load_tasks(self):
         if os.path.exists(self.data_file):
@@ -245,9 +253,12 @@ class TimeManager:
                 with open(self.data_file, "r", encoding="utf-8") as f:
                     tasks_data = json.load(f)
                     self.tasks = [Task.from_dict(task_data) for task_data in tasks_data]
+                    # 初始化哈希值
+                    self.tasks_hash = hash(json.dumps(tasks_data, sort_keys=True))
             except json.JSONDecodeError:
                 print(f"{Fore.RED}任务数据文件损坏，创建新的任务列表{Style.RESET_ALL}")
                 self.tasks = []
+                self.tasks_hash = hash("[]")
 
     def countdown_timer(self, task_index, minutes=25):
         if 1 <= task_index <= len(self.tasks):

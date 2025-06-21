@@ -19,6 +19,8 @@ class TimeManager:
         self.focus_sessions = []
         self.data_file = DATA_FILE
         self.sessions_file = SESSIONS_FILE
+        self.tasks_hash = None  # 添加哈希值用于检测更改
+        self.sessions_hash = None  # 添加哈希值用于检测更改
         self.load_tasks()
         self.load_sessions()
 
@@ -29,8 +31,15 @@ class TimeManager:
         return task
 
     def save_tasks(self):
-        with open(self.data_file, "w", encoding="utf-8") as f:
-            json.dump([task.to_dict() for task in self.tasks], f, ensure_ascii=False, indent=2)
+        # 生成当前任务数据的哈希值
+        tasks_data = [task.to_dict() for task in self.tasks]
+        current_hash = hash(json.dumps(tasks_data, sort_keys=True))
+        
+        # 只有当哈希值不同时（数据有变化）才写入文件
+        if current_hash != self.tasks_hash:
+            with open(self.data_file, "w", encoding="utf-8") as f:
+                json.dump(tasks_data, f, ensure_ascii=False, indent=2)
+            self.tasks_hash = current_hash
 
     def load_tasks(self):
         if os.path.exists(self.data_file):
@@ -38,8 +47,11 @@ class TimeManager:
                 with open(self.data_file, "r", encoding="utf-8") as f:
                     tasks_data = json.load(f)
                     self.tasks = [Task.from_dict(task_data) for task_data in tasks_data]
+                    # 初始化哈希值
+                    self.tasks_hash = hash(json.dumps(tasks_data, sort_keys=True))
             except json.JSONDecodeError:
                 self.tasks = []
+                self.tasks_hash = hash("[]")
 
     def start_focus_session(self, task_id):
         session = FocusSession(task_id)
@@ -56,24 +68,72 @@ class TimeManager:
         return None
 
     def get_sessions_by_date(self, date_str=None):
+        # 初始化会话日期缓存，如果不存在
+        if not hasattr(self, 'sessions_by_date_cache'):
+            self.sessions_by_date_cache = {}
+            self.sessions_date_cache_hash = self.sessions_hash
+            
+        # 检查缓存是否仍然有效
+        if self.sessions_date_cache_hash != self.sessions_hash:
+            # 如果会话数据已更改，则清除缓存
+            self.sessions_by_date_cache = {}
+            self.sessions_date_cache_hash = self.sessions_hash
+            
+        # 使用缓存键
+        cache_key = date_str or "all"
+        
+        # 尝试从缓存获取
+        if cache_key in self.sessions_by_date_cache:
+            return self.sessions_by_date_cache[cache_key]
+            
+        # 计算结果
         sessions = []
         for session in self.focus_sessions:
             session_date = session.start_time.strftime("%Y-%m-%d")
             if not date_str or session_date == date_str:
                 sessions.append(session)
+        
+        # 存入缓存
+        self.sessions_by_date_cache[cache_key] = sessions
         return sessions
     
     def get_task_total_time(self, task_id):
         """计算任务的总专注时间（秒）"""
+        # 初始化时间缓存，如果不存在
+        if not hasattr(self, 'task_time_cache'):
+            self.task_time_cache = {}
+            self.task_time_cache_hash = self.sessions_hash
+            
+        # 检查缓存是否仍然有效
+        if self.task_time_cache_hash != self.sessions_hash:
+            # 如果会话数据已更改，则清除缓存
+            self.task_time_cache = {}
+            self.task_time_cache_hash = self.sessions_hash
+            
+        # 尝试从缓存获取
+        if task_id in self.task_time_cache:
+            return self.task_time_cache[task_id]
+            
+        # 计算总时间
         total_seconds = 0
         for session in self.focus_sessions:
             if session.task_id == task_id and session.end_time and not session.abandoned:
                 total_seconds += session.duration
+                
+        # 存入缓存
+        self.task_time_cache[task_id] = total_seconds
         return total_seconds
 
     def save_sessions(self):
-        with open(self.sessions_file, "w", encoding="utf-8") as f:
-            json.dump([session.to_dict() for session in self.focus_sessions], f, ensure_ascii=False, indent=2)
+        # 生成当前会话数据的哈希值
+        sessions_data = [session.to_dict() for session in self.focus_sessions]
+        current_hash = hash(json.dumps(sessions_data, sort_keys=True))
+        
+        # 只有当哈希值不同时（数据有变化）才写入文件
+        if current_hash != self.sessions_hash:
+            with open(self.sessions_file, "w", encoding="utf-8") as f:
+                json.dump(sessions_data, f, ensure_ascii=False, indent=2)
+            self.sessions_hash = current_hash
 
     def load_sessions(self):
         if os.path.exists(self.sessions_file):
@@ -81,8 +141,11 @@ class TimeManager:
                 with open(self.sessions_file, "r", encoding="utf-8") as f:
                     sessions_data = json.load(f)
                     self.focus_sessions = [FocusSession.from_dict(session_data) for session_data in sessions_data]
+                    # 初始化哈希值
+                    self.sessions_hash = hash(json.dumps(sessions_data, sort_keys=True))
             except json.JSONDecodeError:
                 self.focus_sessions = []
+                self.sessions_hash = hash("[]")
 
     def get_tasks(self):
         return self.tasks
@@ -99,10 +162,8 @@ class TimeManager:
             task.status = "已完成"
             task.completed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.save_tasks()
-            # Rebuild index after status change
-            search_index.clear()
-            for task in self.tasks:
-                search_index.add_task(task)
+            # Update index for this task only
+            search_index.update_task(task)
             return True
         return False
 
@@ -112,22 +173,18 @@ class TimeManager:
             task.status = "未完成"
             task.completed_at = None
             self.save_tasks()
-            # Rebuild index after status change
-            search_index.clear()
-            for task in self.tasks:
-                search_index.add_task(task)
+            # Update index for this task only
+            search_index.update_task(task)
             return True
         return False
 
     def delete_task(self, task_id):
         task = self.get_task_by_id(task_id)
         if task:
+            # Remove task from index before deleting
+            search_index.remove_task(task)
             self.tasks.remove(task)
             self.save_tasks()
-            # Rebuild index after deletion
-            search_index.clear()
-            for task in self.tasks:
-                search_index.add_task(task)
             return True
         return False
 
@@ -173,6 +230,59 @@ class SearchIndex:
         # Index tags
         for tag in task.tags:
             self.tag_index[tag.lower()].append(task_idx)
+
+    def update_task(self, task):
+        """更新任务索引，只更新单个任务而不是整个索引"""
+        # 首先从索引中移除该任务
+        self.remove_task(task)
+        # 然后将更新后的任务重新添加到索引中
+        self.add_task(task)
+        
+    def remove_task(self, task):
+        """从索引中删除指定任务"""
+        # 找到任务在tasks列表中的索引
+        try:
+            task_idx = next(i for i, t in enumerate(self.tasks) if t.id == task.id)
+        except StopIteration:
+            # 如果任务不在索引中，则不需要做任何操作
+            return
+            
+        # 从tasks列表中删除该任务
+        self.tasks.pop(task_idx)
+        
+        # 从各个索引中删除该任务的引用
+        # 处理标题索引
+        for word in re.findall(r'\w+', task.title.lower()):
+            if word in self.title_index and task_idx in self.title_index[word]:
+                self.title_index[word].remove(task_idx)
+                # 更新所有大于task_idx的索引值，因为我们删除了一项
+                self.title_index[word] = [i if i < task_idx else i-1 for i in self.title_index[word]]
+        
+        # 处理描述索引
+        if task.description:
+            for word in re.findall(r'\w+', task.description.lower()):
+                if word in self.description_index and task_idx in self.description_index[word]:
+                    self.description_index[word].remove(task_idx)
+                    self.description_index[word] = [i if i < task_idx else i-1 for i in self.description_index[word]]
+        
+        # 处理优先级索引
+        priority_key = task.priority.lower()
+        if priority_key in self.priority_index and task_idx in self.priority_index[priority_key]:
+            self.priority_index[priority_key].remove(task_idx)
+            self.priority_index[priority_key] = [i if i < task_idx else i-1 for i in self.priority_index[priority_key]]
+        
+        # 处理状态索引
+        status_key = task.status.lower()
+        if status_key in self.status_index and task_idx in self.status_index[status_key]:
+            self.status_index[status_key].remove(task_idx)
+            self.status_index[status_key] = [i if i < task_idx else i-1 for i in self.status_index[status_key]]
+        
+        # 处理标签索引
+        for tag in task.tags:
+            tag_key = tag.lower()
+            if tag_key in self.tag_index and task_idx in self.tag_index[tag_key]:
+                self.tag_index[tag_key].remove(task_idx)
+                self.tag_index[tag_key] = [i if i < task_idx else i-1 for i in self.tag_index[tag_key]]
 
     def clear(self):
         self.__init__()
@@ -229,53 +339,98 @@ def index():
     tasks = manager.get_tasks()
     
     # 获取查询参数
-    sort_by = request.args.get('sort', 'created_at')  # 默认按创建时间排序
-    sort_order = request.args.get('order', 'desc')  # 默认降序
-    filter_status = request.args.get('status', '')  # 默认不过滤
+    search_query = request.args.get('search', '')
+    sort_by = request.args.get('sort_by', 'created_at')  # 默认按创建时间排序
+    sort_order = request.args.get('sort_order', 'desc')  # 默认降序
+    filter_status = request.args.get('status', '未完成')  # 默认只显示未完成任务
     filter_tag = request.args.get('tag', '')  # 默认不过滤标签
+    priority_filter = request.args.get('priority', '')  # 默认不按优先级过滤
     
-    # 过滤任务
-    filtered_tasks = []
-    for task in tasks:
-        # 状态过滤
-        if filter_status and task.status != filter_status:
-            continue
+    # 构建缓存键
+    cache_key = f"{sort_by}_{sort_order}_{filter_status}_{filter_tag}_{priority_filter}_{search_query}"
+    
+    # 使用cached_property模式：保存最近的查询结果
+    if not hasattr(manager, 'task_view_cache'):
+        manager.task_view_cache = {}
+    
+    # 检查缓存是否有效
+    last_modified = getattr(manager, 'tasks_last_modified', None)
+    current_modified = manager.tasks_hash
+    if last_modified != current_modified:
+        # 清除缓存
+        manager.task_view_cache = {}
+        manager.tasks_last_modified = current_modified
         
-        # 标签过滤
-        if filter_tag and filter_tag not in task.tags:
-            continue
+    # 从缓存获取结果或重新计算
+    if cache_key in manager.task_view_cache:
+        tasks_data = manager.task_view_cache[cache_key]
+        all_tags = manager.all_tags_cache if hasattr(manager, 'all_tags_cache') else set()
+    else:
+        # 过滤任务
+        filtered_tasks = []
+        for task in tasks:
+            # 状态过滤
+            if filter_status and task.status != filter_status:
+                continue
+            
+            # 标签过滤
+            if filter_tag and filter_tag not in task.tags:
+                continue
+                
+            # 优先级过滤
+            if priority_filter and task.priority != priority_filter:
+                continue
+                
+            # 简单的搜索过滤
+            if search_query and search_query.lower() not in task.title.lower() and search_query.lower() not in task.description.lower():
+                continue
+            
+            filtered_tasks.append(task)
         
-        filtered_tasks.append(task)
+        # 排序任务
+        if sort_by == 'created_at':
+            filtered_tasks.sort(key=lambda x: x.created_at, reverse=(sort_order == 'desc'))
+        elif sort_by == 'priority':
+            priority_order = {"高": 0, "中": 1, "低": 2}
+            filtered_tasks.sort(key=lambda x: priority_order.get(x.priority, 3), reverse=(sort_order == 'desc'))
+        elif sort_by == 'status':
+            filtered_tasks.sort(key=lambda x: x.status, reverse=(sort_order == 'desc'))
+        elif sort_by == 'expected_time':
+            # 按预期时间排序，None值排在最后
+            filtered_tasks.sort(key=lambda x: (x.expected_time is None, x.expected_time or 0), reverse=(sort_order == 'desc'))
+        elif sort_by == 'total_time':
+            # Calculate total time for each task from focus sessions
+            filtered_tasks.sort(key=lambda x: manager.get_task_total_time(x.id), reverse=(sort_order == 'desc'))
+        
+        # 计算总时间并格式化
+        tasks_data = []
+        for task in filtered_tasks:
+            task_dict = task.to_dict()
+            # 直接设置格式化的字符串，而不是调用方法
+            task_dict['expected_time_str'] = task.get_expected_time_str()
+            # Calculate total time from focus sessions
+            total_time = manager.get_task_total_time(task.id)
+            task_dict['total_time_str'] = task.get_total_time_str(total_time)
+            tasks_data.append(task_dict)
+        
+        # 获取所有唯一标签
+        all_tags = set()
+        for task in tasks:
+            all_tags.update(task.tags)
+        
+        # 保存到缓存
+        manager.task_view_cache[cache_key] = tasks_data
+        manager.all_tags_cache = all_tags
     
-    # 排序任务
-    if sort_by == 'created_at':
-        filtered_tasks.sort(key=lambda x: x.created_at, reverse=(sort_order == 'desc'))
-    elif sort_by == 'priority':
-        priority_order = {"高": 0, "中": 1, "低": 2}
-        filtered_tasks.sort(key=lambda x: priority_order.get(x.priority, 3), reverse=(sort_order == 'desc'))
-    elif sort_by == 'status':
-        filtered_tasks.sort(key=lambda x: x.status, reverse=(sort_order == 'desc'))
-    elif sort_by == 'total_time':
-        # Calculate total time for each task from focus sessions
-        filtered_tasks.sort(key=lambda x: manager.get_task_total_time(x.id), reverse=(sort_order == 'desc'))
-    
-    # 计算总时间并格式化
-    tasks_data = []
-    for task in filtered_tasks:
-        task_dict = task.to_dict()
-        # 直接设置格式化的字符串，而不是调用方法
-        task_dict['expected_time_str'] = task.get_expected_time_str()
-        # Calculate total time from focus sessions
-        total_time = manager.get_task_total_time(task.id)
-        task_dict['total_time_str'] = task.get_total_time_str(total_time)
-        tasks_data.append(task_dict)
-    
-    # 获取所有唯一标签
-    all_tags = set()
-    for task in tasks:
-        all_tags.update(task.tags)
-    
-    return render_template('index.html', tasks=tasks_data, all_tags=sorted(all_tags))
+    return render_template('index.html', 
+                          tasks=tasks_data, 
+                          all_tags=sorted(all_tags), 
+                          search_query=search_query,
+                          priority_filter=priority_filter, 
+                          status_filter=filter_status, 
+                          tag_filter=filter_tag,
+                          sort_by=sort_by,
+                          sort_order=sort_order)
 
 @app.route('/add_task', methods=['POST'])
 def add_task():
@@ -424,6 +579,10 @@ def search():
     status_filter = request.args.get('status', '')
     tag_filter = request.args.get('tag', '')
     
+    # 获取排序参数
+    sort_by = request.args.get('sort_by', 'created_at')  # 默认按创建时间排序
+    sort_order = request.args.get('sort_order', 'desc')  # 默认降序
+    
     # Use the search index
     filtered_tasks = search_index.search(
         query=search_query,
@@ -443,6 +602,18 @@ def search():
         task_dict['total_time'] = total_time  # Add total_time for frontend
         task_dict['total_time_str'] = task.get_total_time_str(total_time)
         tasks_data.append(task_dict)
+    
+    # 排序任务
+    if sort_by == 'created_at':
+        tasks_data.sort(key=lambda x: x['created_at'], reverse=(sort_order == 'desc'))
+    elif sort_by == 'priority':
+        priority_order = {"高": 0, "中": 1, "低": 2}
+        tasks_data.sort(key=lambda x: priority_order.get(x['priority'], 3), reverse=(sort_order == 'desc'))
+    elif sort_by == 'expected_time':
+        # 对预期时间排序，None值排在最后
+        tasks_data.sort(key=lambda x: (x['expected_time'] is None, x['expected_time'] or 0), reverse=(sort_order == 'desc'))
+    elif sort_by == 'total_time':
+        tasks_data.sort(key=lambda x: x['total_time'], reverse=(sort_order == 'desc'))
     
     return jsonify(tasks_data)
 
@@ -495,14 +666,54 @@ def end_focus(task_id):
 @app.route('/focus_history')
 def focus_history():
     # 获取日期参数，默认为今天
-    date_str = request.args.get('date', datetime.now().strftime("%Y-%m-%d"))
+    date_str = request.args.get('date')
+    if not date_str:  # 如果日期参数为空，使用当天日期
+        date_str = datetime.now().strftime("%Y-%m-%d")
+    
+    # 使用缓存减少重复计算
+    if not hasattr(manager, 'focus_history_cache'):
+        manager.focus_history_cache = {}
+    
+    # 检查缓存是否有效
+    sessions_last_modified = getattr(manager, 'sessions_last_modified', None)
+    current_modified = manager.sessions_hash
+    if sessions_last_modified != current_modified:
+        # 清除缓存
+        manager.focus_history_cache = {}
+        manager.sessions_last_modified = current_modified
+    
+    # 尝试从缓存获取结果
+    if date_str in manager.focus_history_cache:
+        cache_data = manager.focus_history_cache[date_str]
+        return render_template('focus_history.html', 
+                             date=date_str,
+                             tasks=cache_data['tasks_data'], 
+                             total_focus_time_str=cache_data['total_focus_time_str'],
+                             total_tasks=cache_data['total_tasks'], 
+                             completed_tasks=cache_data['completed_tasks'],
+                             chart_data=cache_data['chart_data'],
+                             timeline_data=cache_data['timeline_data'])
     
     # 获取该日期的所有专注会话
     sessions = manager.get_sessions_by_date(date_str)
     
+    # 预先解析日期字符串，避免重复解析
+    if not date_str:
+        # 如果日期为空，使用当天日期
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        date_obj = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        try:
+            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+        except ValueError:
+            # 如果日期格式无效，使用当天日期
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            date_obj = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    
     # 按任务ID分组并计算每个任务的专注时间
     task_times = {}
     task_sessions = {}
+    task_colors = {}
     
     for session in sessions:
         if session.end_time and not session.abandoned:  # 只统计已结束且未放弃的会话
@@ -510,6 +721,8 @@ def focus_history():
             if task_id not in task_times:
                 task_times[task_id] = 0
                 task_sessions[task_id] = []
+                # 预先计算颜色并缓存
+                task_colors[task_id] = f"hsl({hash(task_id) % 360}, 70%, 50%)"
             
             task_times[task_id] += session.duration
             task_sessions[task_id].append(session)
@@ -525,13 +738,17 @@ def focus_history():
             task_data['focus_time'] = time_spent
             task_data['focus_time_str'] = task.format_time(time_spent)
             task_data['sessions'] = []
+            task_data['color'] = task_colors[task_id]
             
             # 添加会话详情
             for session in task_sessions[task_id]:
+                start_time_str = session.start_time.strftime("%H:%M:%S")
+                end_time_str = session.end_time.strftime("%H:%M:%S") if session.end_time else ""
+                
                 session_data = {
                     'id': session.id,
-                    'start_time': session.start_time.strftime("%H:%M:%S"),
-                    'end_time': session.end_time.strftime("%H:%M:%S") if session.end_time else "",
+                    'start_time': start_time_str,
+                    'end_time': end_time_str,
                     'duration': session.duration,
                     'duration_str': task.format_time(session.duration)
                 }
@@ -545,28 +762,24 @@ def focus_history():
     completed_tasks = sum(1 for task in tasks_data if task['status'] == '已完成')
     
     # 格式化总专注时间
-    if tasks_data:
-        total_focus_time_str = Task.format_time(total_focus_time)
-    else:
-        total_focus_time_str = "00:00:00"
+    total_focus_time_str = Task.format_time(total_focus_time) if tasks_data else "00:00:00"
     
-    # 准备图表数据
-    chart_data = []
-    for task in tasks_data:
-        chart_data.append({
-            'task': task['title'],
-            'time': task['focus_time'],
-            'color': f"hsl({hash(task['id']) % 360}, 70%, 50%)"  # 生成一个基于任务ID的颜色
-        })
+    # 准备图表数据 - 使用已经缓存的颜色
+    chart_data = [{'task': task['title'], 'time': task['focus_time'], 'color': task['color']} 
+                 for task in tasks_data]
     
-    # 准备时间轴数据
+    # 准备时间轴数据 - 预计算并一次性转换日期
     timeline_data = []
+    
     for task in tasks_data:
         for session in task['sessions']:
-            if 'start_time' in session and 'end_time' in session and session['end_time']:
+            if session['start_time'] and session['end_time']:
                 try:
-                    start = datetime.strptime(date_str + " " + session['start_time'], "%Y-%m-%d %H:%M:%S")
-                    end = datetime.strptime(date_str + " " + session['end_time'], "%Y-%m-%d %H:%M:%S")
+                    # 组合日期和时间，避免重复字符串拼接
+                    start = datetime.combine(date_obj.date(), 
+                                           datetime.strptime(session['start_time'], "%H:%M:%S").time())
+                    end = datetime.combine(date_obj.date(),
+                                         datetime.strptime(session['end_time'], "%H:%M:%S").time())
                     
                     # 处理跨日的情况
                     if end < start:
@@ -578,21 +791,31 @@ def focus_history():
                         'start': start.strftime("%Y-%m-%d %H:%M:%S"),
                         'end': end.strftime("%Y-%m-%d %H:%M:%S"),
                         'duration': session['duration'],
-                        'color': f"hsl({hash(task['id']) % 360}, 70%, 50%)"
+                        'color': task['color']  # 使用已缓存的颜色
                     })
                 except (ValueError, TypeError) as e:
                     app.logger.error(f"Error processing session: {e}")
                     # 跳过有问题的会话
                     continue
     
-    # 确保所有数据都是可序列化的
+    # 保存到缓存
+    manager.focus_history_cache[date_str] = {
+        'tasks_data': tasks_data,
+        'total_focus_time_str': total_focus_time_str,
+        'total_tasks': total_tasks,
+        'completed_tasks': completed_tasks,
+        'chart_data': chart_data,
+        'timeline_data': timeline_data
+    }
+    
+    # 确保数据是可序列化的
     chart_data_json = json.dumps(chart_data)
     timeline_data_json = json.dumps(timeline_data)
     
     return render_template('focus_history.html', 
                           date=date_str,
                           tasks=tasks_data,
-                          total_focus_time=total_focus_time_str,
+                          total_focus_time_str=total_focus_time_str,
                           total_tasks=total_tasks,
                           completed_tasks=completed_tasks,
                           chart_data=chart_data_json,
@@ -630,7 +853,10 @@ def delete_focus_session(session_id):
     """删除专注会话的路由"""
     if manager.delete_focus_session(session_id):
         # 获取当前的日期参数，以便重定向回同一天的历史记录
-        date_str = request.args.get('date', datetime.now().strftime("%Y-%m-%d"))
+        date_str = request.args.get('date', '')
+        
+        # 即使日期为空，也进行正常重定向
+        # focus_history路由会处理空日期的情况
         return jsonify({'success': True, 'redirect': f'/focus_history?date={date_str}'})
     return jsonify({'success': False, 'error': '找不到指定的专注会话'}), 404
 
