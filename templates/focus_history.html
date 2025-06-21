@@ -1,0 +1,954 @@
+{% extends "base.html" %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<style>
+    /* 卡片样式 */
+    .stats-card {
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        transition: transform 0.3s ease;
+        margin-bottom: 20px;
+    }
+    .stats-card:hover {
+        transform: translateY(-5px);
+    }
+    .stats-icon {
+        font-size: 2rem;
+        margin-bottom: 10px;
+    }
+    .stats-number {
+        font-size: 2rem;
+        font-weight: 700;
+        margin-bottom: 5px;
+    }
+    .stats-label {
+        font-size: 0.9rem;
+        color: #6c757d;
+    }
+    
+    /* 图表容器 */
+    .chart-container {
+        position: relative;
+        height: 300px;
+        margin-bottom: 20px;
+    }
+    
+    /* 时间轴样式 */
+    .timeline-container {
+        position: relative;
+        margin: 20px 0;
+        padding-left: 50px; /* 为小时刻度留出空间 */
+        height: 500px; /* 设置固定高度 */
+        overflow-y: auto; /* 添加垂直滚动条 */
+        border: 1px solid #eee;
+        background-color: #ffffff;
+    }
+    
+    /* 时间轴刻度样式 */
+    .timeline-hours-container {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 50px;
+        height: 100%;
+        z-index: 10;
+        background-color: #f8f9fa;
+        border-right: 1px solid #dee2e6;
+        pointer-events: none; /* 防止刻度阻挡滚动 */
+    }
+    .timeline-hour-marker {
+        position: absolute;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        padding-right: 10px;
+        font-size: 0.8rem;
+        color: #6c757d;
+        box-sizing: border-box;
+        height: 20px; /* 固定高度 */
+        margin-top: -10px; /* 垂直居中 */
+    }
+    .timeline-hour-marker::after {
+        content: '';
+        position: absolute;
+        width: 10px;
+        height: 1px;
+        background-color: #dee2e6;
+        right: -1px;
+        top: 50%;
+    }
+    
+    /* 时间轴线 */
+    .timeline-line {
+        width: 100%;
+        background-color: transparent;
+        position: relative;
+        min-height: 100%;
+    }
+    
+    /* 时间轴网格线 */
+    .timeline-grid-line {
+        position: absolute;
+        left: 0;
+        width: 100%;
+        height: 1px;
+        background-color: rgba(0,0,0,0.05);
+        pointer-events: none; /* 防止网格线阻挡交互 */
+    }
+    .timeline-half-hour {
+        border-top: 1px dashed rgba(0,0,0,0.03);
+        height: 0;
+    }
+    
+    /* 任务块样式 */
+    .timeline-task {
+        position: absolute;
+        left: 0;
+        width: calc(100% - 20px);
+        border-radius: 4px;
+        color: white;
+        font-size: 0.8rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 5px 10px;
+        cursor: pointer;
+        box-sizing: border-box;
+        margin-left: 10px;
+        border-left: 4px solid rgba(0,0,0,0.2);
+        z-index: 5;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        transition: all 0.2s;
+        overflow: hidden; /* 防止内容溢出 */
+        transform-origin: left center; /* 设置变换原点 */
+    }
+    .timeline-task:hover {
+        z-index: 100;
+        box-shadow: 0 3px 6px rgba(0, 0, 0, 0.2);
+        transform: translateX(3px);
+        transition: all 0.2s ease;
+    }
+    .timeline-task-content {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        width: 100%;
+        font-weight: 500;
+    }
+    .timeline-task-time {
+        font-size: 0.7rem;
+        opacity: 0.8;
+        margin-top: 2px;
+        white-space: nowrap; /* 防止时间信息换行 */
+    }
+    
+    /* 当前时间指示器 */
+    .timeline-now-indicator {
+        position: absolute;
+        left: 0;
+        width: 100%;
+        height: 2px;
+        background-color: #dc3545;
+        z-index: 20;
+    }
+    .timeline-now-label {
+        position: absolute;
+        left: -50px;
+        transform: translateY(-50%);
+        background-color: #dc3545;
+        color: white;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 0.7rem;
+        z-index: 21;
+    }
+    
+    /* 表格样式 */
+    .focus-table th, .focus-table td {
+        vertical-align: middle;
+    }
+    .focus-duration {
+        font-weight: 600;
+        color: #0d6efd;
+    }
+    
+    /* 日期选择器样式 */
+    .date-picker-container {
+        position: relative;
+        max-width: 300px;
+    }
+    .date-picker-container .input-group-text {
+        background-color: #0d6efd;
+        color: white;
+        border: none;
+    }
+    .flatpickr-input {
+        border-radius: 0 0.25rem 0.25rem 0 !important;
+    }
+    
+    /* 删除按钮样式 */
+    .btn-delete-session {
+        color: #dc3545;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .btn-delete-session:hover {
+        color: #bd2130;
+        transform: scale(1.1);
+    }
+    
+    /* 确认对话框样式 */
+    .confirm-dialog {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1050;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s;
+    }
+    .confirm-dialog.show {
+        opacity: 1;
+        visibility: visible;
+    }
+    .confirm-dialog-content {
+        background-color: white;
+        border-radius: 5px;
+        padding: 20px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        max-width: 400px;
+        width: 90%;
+    }
+    .confirm-dialog-title {
+        font-size: 1.2rem;
+        font-weight: 600;
+        margin-bottom: 15px;
+    }
+    .confirm-dialog-message {
+        margin-bottom: 20px;
+    }
+    .confirm-dialog-buttons {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+    }
+    
+    /* 时间轴缩放控制 */
+    .timeline-controls {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px;
+        background-color: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+    }
+    .timeline-zoom-controls {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .zoom-slider {
+        width: 150px;
+    }
+    .timeline-info {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+    }
+    .timeline-view-options {
+        display: flex;
+        gap: 10px;
+    }
+    .timeline-view-option {
+        padding: 4px 8px;
+        border-radius: 4px;
+        background-color: #e9ecef;
+        cursor: pointer;
+        font-size: 0.8rem;
+        transition: all 0.2s;
+    }
+    .timeline-view-option:hover,
+    .timeline-view-option.active {
+        background-color: #0d6efd;
+        color: white;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>专注历史</h2>
+        
+        <!-- 日期选择器 -->
+        <div class="date-picker-container">
+            <div class="input-group">
+                <span class="input-group-text">
+                    <i class="bi bi-calendar3"></i>
+                </span>
+                <input type="text" class="form-control" id="date-picker" placeholder="选择日期" value="{{ date }}">
+            </div>
+        </div>
+    </div>
+    
+    <!-- 第一部分：统计摘要 -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card stats-card bg-primary bg-opacity-10 h-100">
+                <div class="card-body text-center">
+                    <div class="stats-icon text-primary">
+                        <i class="bi bi-clock-history"></i>
+                    </div>
+                    <div class="stats-number text-primary">{{ total_focus_time }}</div>
+                    <div class="stats-label">总专注时长</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card stats-card bg-success bg-opacity-10 h-100">
+                <div class="card-body text-center">
+                    <div class="stats-icon text-success">
+                        <i class="bi bi-list-task"></i>
+                    </div>
+                    <div class="stats-number text-success">{{ total_tasks }}</div>
+                    <div class="stats-label">专注任务数</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card stats-card bg-info bg-opacity-10 h-100">
+                <div class="card-body text-center">
+                    <div class="stats-icon text-info">
+                        <i class="bi bi-check2-circle"></i>
+                    </div>
+                    <div class="stats-number text-info">{{ completed_tasks }}</div>
+                    <div class="stats-label">已完成任务数</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 第二部分：可视化图表 -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">专注时间分布</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="pie-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">时间轴视图</h5>
+                </div>
+                <div class="timeline-controls">
+                    <div class="timeline-zoom-controls">
+                        <button id="zoom-out" class="btn btn-sm btn-outline-secondary" title="缩小视图">
+                            <i class="bi bi-zoom-out"></i>
+                        </button>
+                        <input type="range" id="zoom-slider" class="zoom-slider" min="1" max="10" value="3" title="调整缩放级别">
+                        <button id="zoom-in" class="btn btn-sm btn-outline-secondary" title="放大视图">
+                            <i class="bi bi-zoom-in"></i>
+                        </button>
+                    </div>
+                    <div class="timeline-info">
+                        <small class="text-muted">拖动滑块调整缩放比例</small>
+                        <small class="text-muted">方块大小与专注时长成正比</small>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div id="timeline-container" class="timeline-container">
+                        <!-- 时间轴将通过JavaScript动态生成 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 第三部分：专注数据表格 -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">专注详细数据</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover focus-table" id="focus-table">
+                    <thead>
+                        <tr>
+                            <th>任务名称</th>
+                            <th>开始时间</th>
+                            <th>结束时间</th>
+                            <th>专注时长</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="focus-table-body">
+                        <!-- 表格数据将通过JavaScript动态生成 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 无数据提示 -->
+    <div id="no-data-alert" class="alert alert-info text-center" style="display: none;">
+        <i class="bi bi-info-circle me-2"></i> 当前日期没有专注记录。
+    </div>
+</div>
+
+<!-- 确认删除对话框 -->
+<div id="confirm-delete-dialog" class="confirm-dialog">
+    <div class="confirm-dialog-content">
+        <div class="confirm-dialog-title">确认删除</div>
+        <div class="confirm-dialog-message">确定要删除这条专注记录吗？此操作不可撤销。</div>
+        <div class="confirm-dialog-buttons">
+            <button id="cancel-delete-btn" class="btn btn-secondary">取消</button>
+            <button id="confirm-delete-btn" class="btn btn-danger">删除</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/zh.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // 全局变量
+    let tasks = {{ tasks | tojson }};
+    let chartData = JSON.parse('{{ chart_data | safe }}');
+    let timelineData = JSON.parse('{{ timeline_data | safe }}');
+    let pieChart = null;
+    let currentSessionId = null; // 当前要删除的会话ID
+    let currentZoomLevel = 3; // 默认缩放级别
+    let maxDuration = 0; // 最长的专注时长，用于计算相对大小
+    
+    // 初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        // 初始化Flatpickr日期选择器
+        const datePicker = flatpickr("#date-picker", {
+            dateFormat: "Y-m-d",
+            locale: "zh",
+            defaultDate: "{{ date }}" || new Date(),
+            onChange: function(selectedDates, dateStr) {
+                window.location.href = `/focus_history?date=${dateStr}`;
+            }
+        });
+        
+        // 处理并显示数据
+        processAndDisplayData();
+        
+        // 初始化确认删除对话框
+        initDeleteDialog();
+        
+        // 初始化时间轴控制
+        initTimelineControls();
+    });
+    
+    // 处理并显示所有数据
+    function processAndDisplayData() {
+        if (tasks.length === 0) {
+            document.getElementById('no-data-alert').style.display = 'block';
+            return;
+        }
+        
+        // 计算最长的专注时长
+        if (timelineData && timelineData.length > 0) {
+            maxDuration = Math.max(...timelineData.map(item => item.duration));
+        }
+        
+        // 生成饼图
+        generatePieChart();
+        
+        // 生成时间轴
+        generateTimeline();
+        
+        // 填充表格数据
+        populateTable();
+    }
+    
+    // 初始化时间轴控制
+    function initTimelineControls() {
+        // 缩放滑块
+        const zoomSlider = document.getElementById('zoom-slider');
+        zoomSlider.addEventListener('input', function() {
+            currentZoomLevel = parseInt(this.value);
+            generateTimeline();
+        });
+        
+        // 缩小按钮
+        document.getElementById('zoom-out').addEventListener('click', function() {
+            if (currentZoomLevel > 1) {
+                currentZoomLevel--;
+                zoomSlider.value = currentZoomLevel;
+                generateTimeline();
+            }
+        });
+        
+        // 放大按钮
+        document.getElementById('zoom-in').addEventListener('click', function() {
+            if (currentZoomLevel < 10) {
+                currentZoomLevel++;
+                zoomSlider.value = currentZoomLevel;
+                generateTimeline();
+            }
+        });
+        
+        // 添加滚动到当前时间的功能
+        const selectedDate = "{{ date }}";
+        const today = new Date().toISOString().split('T')[0];
+        
+        if (selectedDate === today) {
+            // 如果是今天，添加"滚动到当前时间"按钮
+            const scrollToNowBtn = document.createElement('button');
+            scrollToNowBtn.className = 'btn btn-sm btn-outline-primary ms-3';
+            scrollToNowBtn.innerHTML = '<i class="bi bi-clock"></i> 滚动到当前时间';
+            scrollToNowBtn.addEventListener('click', scrollToCurrentTime);
+            
+            document.querySelector('.timeline-zoom-controls').appendChild(scrollToNowBtn);
+            
+            // 页面加载后自动滚动到当前时间
+            setTimeout(scrollToCurrentTime, 500);
+        }
+    }
+    
+    // 滚动到当前时间
+    function scrollToCurrentTime() {
+        const now = new Date();
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+        
+        const container = document.getElementById('timeline-container');
+        const timelineHeight = container.scrollHeight;
+        
+        // 计算当前时间在时间轴上的位置
+        const dayProgress = (currentHour * 60 + currentMinute) / (24 * 60);
+        const scrollPosition = timelineHeight * dayProgress - (container.clientHeight / 2);
+        
+        // 平滑滚动到当前时间
+        container.scrollTo({
+            top: Math.max(0, scrollPosition),
+            behavior: 'smooth'
+        });
+    }
+    
+    // 生成饼图
+    function generatePieChart() {
+        if (!chartData || chartData.length === 0) return;
+        
+        // 准备饼图数据
+        const labels = chartData.map(item => item.task);
+        const data = chartData.map(item => item.time);
+        const backgroundColors = chartData.map(item => item.color);
+        
+        // 创建饼图
+        const ctx = document.getElementById('pie-chart').getContext('2d');
+        if (pieChart) {
+            pieChart.destroy();
+        }
+        
+        pieChart = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: backgroundColors,
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: {
+                            boxWidth: 12,
+                            padding: 15
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const value = context.raw;
+                                const hours = Math.floor(value / 3600);
+                                const minutes = Math.floor((value % 3600) / 60);
+                                return `${context.label}: ${hours}小时${minutes}分钟`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // 生成时间轴
+    function generateTimeline() {
+        const container = document.getElementById('timeline-container');
+        container.innerHTML = '';
+        
+        // 设置时间轴高度，根据缩放级别调整
+        const baseHeight = 500; // 基础高度
+        const zoomFactor = currentZoomLevel * 0.5; // 缩放因子
+        const timelineHeight = baseHeight * zoomFactor;
+        
+        // 创建时间轴线
+        const timelineLine = document.createElement('div');
+        timelineLine.className = 'timeline-line';
+        timelineLine.style.height = `${timelineHeight}px`;
+        container.appendChild(timelineLine);
+        
+        // 创建动态时间刻度容器
+        const timelineHoursContainer = document.createElement('div');
+        timelineHoursContainer.className = 'timeline-hours-container';
+        timelineHoursContainer.style.height = `${timelineHeight}px`;
+        
+        // 添加24小时刻度
+        for (let i = 0; i <= 24; i++) {
+            // 只显示0-23小时的刻度
+            if (i < 24) {
+                const hourMarker = document.createElement('div');
+                hourMarker.className = 'timeline-hour-marker';
+                hourMarker.textContent = `${i}:00`;
+                
+                // 计算刻度位置 - 精确定位到时间轴上的对应位置
+                const positionPercent = (i / 24) * 100;
+                hourMarker.style.top = `${positionPercent}%`;
+                
+                timelineHoursContainer.appendChild(hourMarker);
+            }
+            
+            // 添加网格线（包括24:00的线）
+            const gridLine = document.createElement('div');
+            gridLine.className = 'timeline-grid-line';
+            
+            // 计算网格线位置
+            const positionPercent = (i / 24) * 100;
+            gridLine.style.top = `${positionPercent}%`;
+            
+            // 整点的线条更明显
+            gridLine.style.backgroundColor = i % 1 === 0 ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.05)';
+            
+            timelineLine.appendChild(gridLine);
+            
+            // 添加半小时线
+            if (i < 24) {
+                const halfHourLine = document.createElement('div');
+                halfHourLine.className = 'timeline-grid-line timeline-half-hour';
+                
+                const halfHourPercent = ((i + 0.5) / 24) * 100;
+                halfHourLine.style.top = `${halfHourPercent}%`;
+                halfHourLine.style.backgroundColor = 'rgba(0,0,0,0.03)';
+                halfHourLine.style.borderStyle = 'dashed';
+                
+                timelineLine.appendChild(halfHourLine);
+            }
+        }
+        
+        container.appendChild(timelineHoursContainer);
+        
+        // 添加当前时间指示器（仅当选择的是今天时）
+        const selectedDate = "{{ date }}";
+        const today = new Date().toISOString().split('T')[0];
+        
+        if (selectedDate === today) {
+            const now = new Date();
+            const currentHour = now.getHours();
+            const currentMinute = now.getMinutes();
+            const currentSecond = now.getSeconds();
+            
+            const totalSeconds = currentHour * 3600 + currentMinute * 60 + currentSecond;
+            const dayTotalSeconds = 24 * 3600; // 一天总秒数
+            const nowPercent = (totalSeconds / dayTotalSeconds) * 100;
+            
+            const nowIndicator = document.createElement('div');
+            nowIndicator.className = 'timeline-now-indicator';
+            nowIndicator.style.top = `${nowPercent}%`;
+            
+            const nowLabel = document.createElement('div');
+            nowLabel.className = 'timeline-now-label';
+            nowLabel.textContent = '现在';
+            nowLabel.style.top = `${nowPercent}%`;
+            
+            timelineLine.appendChild(nowIndicator);
+            timelineLine.appendChild(nowLabel);
+        }
+        
+        // 添加任务块到时间轴
+        if (timelineData && timelineData.length > 0) {
+            timelineData.forEach(item => {
+                const startTime = new Date(item.start);
+                const endTime = new Date(item.end);
+                
+                // 计算开始和结束时间对应的秒数（相对于当天0点）
+                const startHours = startTime.getHours();
+                const startMinutes = startTime.getMinutes();
+                const startSeconds = startTime.getSeconds();
+                const startTotalSeconds = startHours * 3600 + startMinutes * 60 + startSeconds;
+                
+                const endHours = endTime.getHours();
+                const endMinutes = endTime.getMinutes();
+                const endSeconds = endTime.getSeconds();
+                const endTotalSeconds = endHours * 3600 + endMinutes * 60 + endSeconds;
+                
+                // 一天总秒数
+                const dayTotalSeconds = 24 * 3600;
+                
+                // 计算在时间轴上的精确位置（百分比）
+                const startPercent = (startTotalSeconds / dayTotalSeconds) * 100;
+                const endPercent = (endTotalSeconds / dayTotalSeconds) * 100;
+                
+                // 创建任务块
+                const taskBlock = document.createElement('div');
+                taskBlock.className = 'timeline-task';
+                
+                // 精确设置任务块的位置和高度
+                // 上边缘与开始时间对齐
+                taskBlock.style.top = `${startPercent}%`;
+                
+                // 高度为结束时间与开始时间的差值
+                const heightPercent = endPercent - startPercent;
+                
+                // 确保任务块至少有最小高度
+                const minHeight = 1.5;
+                const actualHeight = Math.max(heightPercent, minHeight);
+                taskBlock.style.height = `${actualHeight}%`;
+                
+                // 设置任务块颜色
+                taskBlock.style.backgroundColor = item.color;
+                
+                // 根据专注时长调整任务块的宽度和样式
+                if (maxDuration > 0) {
+                    // 计算相对宽度，范围从60%到95%
+                    const widthPercent = 60 + ((item.duration / maxDuration) * 35);
+                    taskBlock.style.width = `${widthPercent}%`;
+                    
+                    // 根据时长设置左边框宽度，时长越长边框越粗
+                    const borderWidth = 2 + ((item.duration / maxDuration) * 8);
+                    taskBlock.style.borderLeftWidth = `${borderWidth}px`;
+                    
+                    // 设置z-index，时长越长层级越高
+                    const zIndex = 5 + Math.floor((item.duration / maxDuration) * 10);
+                    taskBlock.style.zIndex = zIndex;
+                    
+                    // 根据时长设置阴影，时长越长阴影越明显
+                    const shadowSize = 1 + Math.floor((item.duration / maxDuration) * 5);
+                    taskBlock.style.boxShadow = `0 ${shadowSize}px ${shadowSize * 2}px rgba(0,0,0,0.2)`;
+                    
+                    // 根据时长设置字体大小，时长越长字体越大
+                    const fontSize = 0.8 + ((item.duration / maxDuration) * 0.2);
+                    taskBlock.style.fontSize = `${fontSize}rem`;
+                }
+                
+                // 创建任务内容
+                const taskContent = document.createElement('div');
+                taskContent.className = 'timeline-task-content';
+                taskContent.textContent = item.task_title;
+                
+                // 创建时间信息
+                const taskTime = document.createElement('div');
+                taskTime.className = 'timeline-task-time';
+                
+                // 计算时长
+                const hours = Math.floor(item.duration / 3600);
+                const minutes = Math.floor((item.duration % 3600) / 60);
+                const durationText = hours > 0 ? `${hours}h${minutes}m` : `${minutes}m`;
+                
+                // 格式化时间显示
+                const formatTime = (date) => {
+                    return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+                };
+                
+                taskTime.textContent = `${formatTime(startTime)} - ${formatTime(endTime)} (${durationText})`;
+                
+                // 添加工具提示
+                taskBlock.title = `${item.task_title}\n${formatTime(startTime)} - ${formatTime(endTime)}\n时长: ${durationText}`;
+                
+                // 如果高度足够，显示任务名称和时间
+                if (actualHeight > 3) {
+                    taskBlock.appendChild(taskContent);
+                    
+                    if (actualHeight > 5) {
+                        taskBlock.appendChild(taskTime);
+                    }
+                }
+                
+                timelineLine.appendChild(taskBlock);
+            });
+        }
+    }
+    
+    // 填充表格数据
+    function populateTable() {
+        const tableBody = document.getElementById('focus-table-body');
+        tableBody.innerHTML = '';
+        
+        // 遍历所有任务和会话
+        tasks.forEach(task => {
+            if (!task.sessions || task.sessions.length === 0) return;
+            
+            task.sessions.forEach(session => {
+                const row = document.createElement('tr');
+                
+                // 任务名称单元格
+                const taskCell = document.createElement('td');
+                taskCell.textContent = task.title;
+                
+                // 添加彩色标记
+                const colorMark = document.createElement('span');
+                colorMark.style.display = 'inline-block';
+                colorMark.style.width = '12px';
+                colorMark.style.height = '12px';
+                colorMark.style.borderRadius = '50%';
+                
+                // 查找任务对应的颜色
+                let taskColor = '#4e73df';
+                if (chartData && chartData.length > 0) {
+                    const taskItem = chartData.find(item => item.task === task.title);
+                    if (taskItem && taskItem.color) {
+                        taskColor = taskItem.color;
+                    }
+                }
+                colorMark.style.backgroundColor = taskColor;
+                colorMark.style.marginRight = '8px';
+                
+                taskCell.prepend(colorMark);
+                row.appendChild(taskCell);
+                
+                // 开始时间单元格
+                const startCell = document.createElement('td');
+                startCell.textContent = session.start_time;
+                row.appendChild(startCell);
+                
+                // 结束时间单元格
+                const endCell = document.createElement('td');
+                endCell.textContent = session.end_time || '进行中';
+                row.appendChild(endCell);
+                
+                // 专注时长单元格
+                const durationCell = document.createElement('td');
+                durationCell.className = 'focus-duration';
+                durationCell.textContent = session.duration_str;
+                row.appendChild(durationCell);
+                
+                // 状态单元格
+                const statusCell = document.createElement('td');
+                if (!session.end_time) {
+                    const badge = document.createElement('span');
+                    badge.className = 'badge bg-success';
+                    badge.textContent = '进行中';
+                    statusCell.appendChild(badge);
+                } else {
+                    const badge = document.createElement('span');
+                    badge.className = 'badge bg-secondary';
+                    badge.textContent = '已完成';
+                    statusCell.appendChild(badge);
+                }
+                row.appendChild(statusCell);
+                
+                // 操作单元格
+                const actionCell = document.createElement('td');
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'btn btn-link btn-delete-session p-0';
+                deleteBtn.innerHTML = '<i class="bi bi-trash"></i>';
+                deleteBtn.title = '删除此专注记录';
+                deleteBtn.onclick = function() {
+                    showDeleteConfirmation(session.id);
+                };
+                actionCell.appendChild(deleteBtn);
+                row.appendChild(actionCell);
+                
+                tableBody.appendChild(row);
+            });
+        });
+        
+        // 如果表格为空，显示无数据提示
+        if (tableBody.children.length === 0) {
+            document.getElementById('no-data-alert').style.display = 'block';
+        }
+    }
+    
+    // 初始化删除确认对话框
+    function initDeleteDialog() {
+        const dialog = document.getElementById('confirm-delete-dialog');
+        const cancelBtn = document.getElementById('cancel-delete-btn');
+        const confirmBtn = document.getElementById('confirm-delete-btn');
+        
+        // 取消按钮
+        cancelBtn.addEventListener('click', function() {
+            hideDeleteConfirmation();
+        });
+        
+        // 确认删除按钮
+        confirmBtn.addEventListener('click', function() {
+            if (currentSessionId) {
+                deleteFocusSession(currentSessionId);
+            }
+        });
+        
+        // 点击对话框外部关闭
+        dialog.addEventListener('click', function(e) {
+            if (e.target === dialog) {
+                hideDeleteConfirmation();
+            }
+        });
+    }
+    
+    // 显示删除确认对话框
+    function showDeleteConfirmation(sessionId) {
+        currentSessionId = sessionId;
+        const dialog = document.getElementById('confirm-delete-dialog');
+        dialog.classList.add('show');
+    }
+    
+    // 隐藏删除确认对话框
+    function hideDeleteConfirmation() {
+        const dialog = document.getElementById('confirm-delete-dialog');
+        dialog.classList.remove('show');
+        currentSessionId = null;
+    }
+    
+    // 删除专注会话
+    function deleteFocusSession(sessionId) {
+        // 获取当前日期参数
+        const urlParams = new URLSearchParams(window.location.search);
+        const dateParam = urlParams.get('date') || '';
+        
+        // 发送删除请求
+        fetch(`/delete_focus_session/${sessionId}?date=${dateParam}`, {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // 重新加载页面
+                window.location.href = data.redirect;
+            } else {
+                alert('删除失败: ' + (data.error || '未知错误'));
+                hideDeleteConfirmation();
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('删除失败，请稍后重试');
+            hideDeleteConfirmation();
+        });
+    }
+</script>
+{% endblock %}

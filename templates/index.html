@@ -1,0 +1,519 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- 搜索和过滤 -->
+<div class="card mb-4">
+    <div class="card-body">
+        <h5 class="card-title">搜索和过滤</h5>
+        <form id="searchForm" method="GET" action="{{ url_for('index') }}" class="row g-3">
+            <div class="col-md-4">
+                <input type="text" class="form-control search-input" name="search" 
+                       placeholder="搜索标题或描述" value="{{ search_query }}">
+            </div>
+            <div class="col-md-2">
+                <select class="form-select search-input" name="priority">
+                    <option value="">所有优先级</option>
+                    <option value="高" {% if priority_filter == '高' %}selected{% endif %}>高优先级</option>
+                    <option value="中" {% if priority_filter == '中' %}selected{% endif %}>中优先级</option>
+                    <option value="低" {% if priority_filter == '低' %}selected{% endif %}>低优先级</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select search-input" name="status">
+                    <option value="">所有状态</option>
+                    <option value="未完成" {% if status_filter == '未完成' %}selected{% endif %}>未完成</option>
+                    <option value="已完成" {% if status_filter == '已完成' %}selected{% endif %}>已完成</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select search-input" name="tag">
+                    <option value="">所有标签</option>
+                    {% for tag in all_tags %}
+                    <option value="{{ tag }}" {% if tag_filter == tag %}selected{% endif %}>{{ tag }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="button" class="btn btn-secondary w-100" onclick="resetSearch()">
+                    <i class="bi bi-arrow-counterclockwise"></i> 重置
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 添加任务按钮 -->
+<div class="mb-4">
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTaskModal">
+        <i class="bi bi-plus-lg"></i> 添加新任务
+    </button>
+</div>
+
+<!-- 任务列表 -->
+<div id="taskList" class="row">
+    {% for task in tasks %}
+    <div class="col-md-6">
+        <div class="task-card card mb-3" data-task-id="{{ task.id }}">
+            <div class="card-body">
+                <h5 class="card-title d-flex justify-content-between align-items-center">
+                    {{ task.title }}
+                    <div class="btn-group">
+                        <button class="btn btn-sm btn-primary" onclick="handleStartFocusClick('{{ task.id }}', '{{ task.title }}')">
+                            开始专注
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="editTask('{{ task.id }}')">
+                            编辑
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteTask('{{ task.id }}')">
+                            删除
+                        </button>
+                    </div>
+                </h5>
+                <p class="card-text">{{ task.description }}</p>
+                <div class="mb-2">
+                    <span class="priority-{{ task.priority }}">
+                        <i class="bi bi-flag-fill"></i> {{ task.priority }}优先级
+                    </span>
+                </div>
+                <div class="mb-2">
+                    <small class="text-muted">
+                        创建时间：{{ task.created_at }}
+                        {% if task.completed_at %}
+                        <br>完成时间：{{ task.completed_at }}
+                        {% endif %}
+                    </small>
+                </div>
+                <div class="mb-2">
+                    <small class="text-muted">
+                        预期时长：{{ task.expected_time_str }}
+                        {% if task.total_time_str %}
+                        <br>已专注：{{ task.total_time_str }}
+                        {% endif %}
+                    </small>
+                </div>
+                <div class="mb-2">
+                    {% for tag in task.tags %}
+                    <span class="badge bg-light text-dark tag">{{ tag }}</span>
+                    {% endfor %}
+                </div>
+                <div class="btn-group">
+                    {% if task.status != '已完成' %}
+                    <a href="{{ url_for('complete_task', task_id=task.id) }}" class="btn btn-success btn-sm">
+                        <i class="bi bi-check-lg"></i> 完成任务
+                    </a>
+                    {% else %}
+                    <a href="{{ url_for('uncomplete_task', task_id=task.id) }}" class="btn btn-warning btn-sm">
+                        <i class="bi bi-arrow-counterclockwise"></i> 置为未完成
+                    </a>
+                    {% endif %}
+                    <a href="{{ url_for('delete_task', task_id=task.id) }}" class="btn btn-danger btn-sm" 
+                       onclick="return confirm('确定要删除这个任务吗？')">
+                        <i class="bi bi-trash"></i> 删除
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- 专注会话小窗口 -->
+<div class="focus-modal" id="focusModal" style="display: none; position: fixed; width: 300px; height: auto; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9999; max-height: 195px;">
+    <div class="modal-header">
+        <h5 class="modal-title">专注会话</h5>
+        <button type="button" class="btn-close" aria-label="Close" onclick="endFocus()"></button>
+    </div>
+    <div class="modal-body" style="padding: 12px 15px 7px 15px;">
+        <div class="focus-task-name" id="focusTaskName"></div>
+        <div class="focus-timer" id="focusTimer">00:00:00</div>
+        <div class="focus-controls">
+            <button class="btn btn-pause" id="pauseButton" onclick="togglePause()">暂停</button>
+            <button class="btn btn-abandon" onclick="abandonFocus()">放弃</button>
+        </div>
+    </div>
+</div>
+
+<!-- 添加任务的模态框 -->
+<div class="modal fade" id="addTaskModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">添加新任务</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addTaskForm" method="POST" action="{{ url_for('add_task') }}">
+                    <div class="mb-3">
+                        <label for="title" class="form-label">标题</label>
+                        <input type="text" class="form-control" id="title" name="title" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label">描述</label>
+                        <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="priority" class="form-label">优先级</label>
+                        <select class="form-select" id="priority" name="priority">
+                            <option value="高">高</option>
+                            <option value="中" selected>中</option>
+                            <option value="低">低</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="expected_time" class="form-label">预计完成时间（分钟）</label>
+                        <input type="number" class="form-control" id="expected_time" name="expected_time" min="0">
+                    </div>
+                    <div class="mb-3">
+                        <label for="tags" class="form-label">标签</label>
+                        <select class="form-control select2-tags" id="tags" name="tags" multiple>
+                            {% for tag in all_tags %}
+                            <option value="{{ tag }}">{{ tag }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="submit" form="addTaskForm" class="btn btn-primary">添加</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// 全局变量
+let currentSession = null;
+let timerInterval;
+let startTime;
+let focusInterval;
+let focusStartTime;
+let focusElapsedTime = 0;
+let isPaused = false;
+let currentTaskId = null;
+
+// Select2初始化
+$(document).ready(function() {
+    // 初始化模态框
+    $('#addTaskModal').modal({
+        backdrop: 'static',
+        keyboard: true,
+        focus: true
+    });
+
+    // 确保模态框可以正常关闭
+    $('.modal').on('click', '.close, [data-dismiss="modal"]', function() {
+        $(this).closest('.modal').modal('hide');
+    });
+
+    // 点击模态框外部时关闭
+    $(document).on('click', '.modal', function(e) {
+        if ($(e.target).hasClass('modal')) {
+            $(this).modal('hide');
+        }
+    });
+
+    // 初始化 Select2
+    initializeSelect2();
+
+    // 当模态框打开时重新初始化 Select2
+    $('#addTaskModal').on('shown.bs.modal', function () {
+        initializeSelect2();
+    });
+
+    // 为所有搜索输入添加事件监听
+    const searchInputs = document.querySelectorAll('.search-input');
+    searchInputs.forEach(input => {
+        if (input.tagName === 'SELECT') {
+            input.addEventListener('change', performSearch);
+        } else {
+            input.addEventListener('input', debounce(performSearch, 300));
+        }
+    });
+
+    // 初始加载时执行一次搜索
+    performSearch();
+});
+
+function initializeSelect2() {
+    $('.select2-tags').select2({
+        tags: true,
+        tokenSeparators: [',', ' '],
+        placeholder: "添加标签",
+        allowClear: true,
+        dropdownParent: $('#addTaskModal'),
+        closeOnSelect: false,  // 选择后不关闭下拉框
+        multiple: true,        // 确保是多选模式
+        selectionAdapter: $.fn.select2.amd.require("CustomSelectionAdapter")
+    }).on('select2:selecting', function(e) {
+        // 防止在选择时关闭下拉框
+        e.preventDefault();
+        var data = e.params.args.data;
+        var $select = $(this);
+        var values = $select.val() || [];
+        values.push(data.id);
+        $select.val(values).trigger('change');
+    });
+}
+
+// 自定义选择适配器以优化多选行为
+$.fn.select2.amd.define('CustomSelectionAdapter', [
+    'select2/selection/multiple',
+    'select2/selection/search',
+    'select2/utils'
+], function (MultipleSelection, Search, Utils) {
+    var adapter = Utils.Decorate(MultipleSelection, Search);
+    return adapter;
+});
+
+// 搜索相关函数
+function resetSearch() {
+    const inputs = document.querySelectorAll('.search-input');
+    inputs.forEach(input => {
+        input.value = '';
+    });
+    window.location.href = window.location.pathname;
+}
+
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+function performSearch() {
+    // 获取所有搜索参数
+    const searchForm = document.getElementById('searchForm');
+    const formData = new FormData(searchForm);
+    const params = new URLSearchParams();
+    
+    // 添加所有非空搜索参数
+    for (let [key, value] of formData.entries()) {
+        if (value) {  // 只添加非空值
+            params.append(key, value);
+        }
+    }
+    
+    // 显示加载状态
+    const taskList = document.getElementById('taskList');
+    taskList.innerHTML = '<div class="text-center p-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">加载中...</span></div></div>';
+    
+    // 发送搜索请求
+    fetch(`/search?${params.toString()}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(tasks => {
+            if (tasks && tasks.length > 0) {
+                const fragment = document.createDocumentFragment();
+                const templateContainer = document.createElement('div');
+                templateContainer.className = 'row';
+                
+                tasks.forEach(task => {
+                    // 转义特殊字符，防止XSS攻击
+                    const escapeHtml = (str) => {
+                        if (!str) return '';
+                        const div = document.createElement('div');
+                        div.textContent = str;
+                        return div.innerHTML;
+                    };
+
+                    const taskHtml = `
+                        <div class="col-md-6">
+                            <div class="task-card card mb-3" data-task-id="${escapeHtml(task.id)}">
+                                <div class="card-body">
+                                    <h5 class="card-title d-flex justify-content-between align-items-center">
+                                        ${escapeHtml(task.title)}
+                                        <div class="btn-group">
+                                            <button class="btn btn-sm btn-primary" onclick="handleStartFocusClick('${escapeHtml(task.id)}', '${escapeHtml(task.title)}')">
+                                                开始专注
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-secondary" onclick="editTask('${escapeHtml(task.id)}')">
+                                                编辑
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger" onclick="deleteTask('${escapeHtml(task.id)}')">
+                                                删除
+                                            </button>
+                                        </div>
+                                    </h5>
+                                    <p class="card-text">${escapeHtml(task.description)}</p>
+                                    <div class="mb-2">
+                                        <span class="priority-${task.priority}">
+                                            <i class="bi bi-flag-fill"></i> ${escapeHtml(task.priority)}优先级
+                                        </span>
+                                    </div>
+                                    <div class="mb-2">
+                                        <small class="text-muted">
+                                            创建时间：${escapeHtml(task.created_at)}
+                                            ${task.completed_at ? `<br>完成时间：${escapeHtml(task.completed_at)}` : ''}
+                                        </small>
+                                    </div>
+                                    <div class="mb-2">
+                                        <small class="text-muted">
+                                            预期时长：${task.expected_time_str || '00:00:00'}
+                                            ${task.total_time_str ? `<br>已专注：${task.total_time_str}` : ''}
+                                        </small>
+                                    </div>
+                                    <div class="mb-2">
+                                        ${task.tags.map(tag => `<span class="badge bg-light text-dark tag">${escapeHtml(tag)}</span>`).join('')}
+                                    </div>
+                                    <div class="btn-group">
+                                        ${task.status !== '已完成' ? `
+                                            <a href="/complete_task/${task.id}" class="btn btn-success btn-sm">
+                                                <i class="bi bi-check-lg"></i> 完成任务
+                                            </a>
+                                        ` : `
+                                            <a href="/uncomplete_task/${task.id}" class="btn btn-warning btn-sm">
+                                                <i class="bi bi-arrow-counterclockwise"></i> 置为未完成
+                                            </a>
+                                        `}
+                                        <a href="/delete_task/${task.id}" class="btn btn-danger btn-sm" 
+                                           onclick="return confirm('确定要删除这个任务吗？')">
+                                            <i class="bi bi-trash"></i> 删除
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    templateContainer.insertAdjacentHTML('beforeend', taskHtml);
+                });
+                
+                fragment.appendChild(templateContainer);
+                taskList.innerHTML = '';
+                taskList.appendChild(fragment);
+                
+                // 初始化新添加的任务卡片的专注按钮
+                const taskCards = document.querySelectorAll('.task-card');
+                taskCards.forEach(card => {
+                    const focusBtn = card.querySelector('.focus-btn');
+                    const focusStopBtn = card.querySelector('.focus-stop-btn');
+                    
+                    if (focusBtn && focusStopBtn) {
+                        focusBtn.style.display = 'inline-block';
+                        focusStopBtn.style.display = 'none';
+                    }
+                });
+            } else {
+                taskList.innerHTML = '<div class="text-center p-3 text-muted">没有找到匹配的任务</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            taskList.innerHTML = '<div class="text-center p-3 text-danger">搜索时发生错误，请稍后重试</div>';
+        });
+}
+
+// 专注功能相关函数
+function startFocus(taskId, taskName) {
+    currentTaskId = taskId;
+    focusStartTime = new Date();
+    focusElapsedTime = 0;
+    isPaused = false;
+    
+    // 显示专注窗口
+    document.getElementById('focusModal').style.display = 'block';
+    
+    // 截断过长的任务名称，放大后可以显示更多字符
+    const truncatedName = taskName.length > 22 ? taskName.substring(0, 22) + '...' : taskName;
+    document.getElementById('focusTaskName').textContent = truncatedName;
+    
+    document.getElementById('focusTimer').textContent = '00:00:00';
+    document.getElementById('pauseButton').textContent = '暂停';
+    
+    // 启动计时器
+    focusInterval = setInterval(updateTimer, 1000);
+    
+    // 发送开始专注请求
+    fetch(`/start_focus/${taskId}`, {
+        method: 'POST'
+    });
+}
+
+function updateTimer() {
+    if (!isPaused) {
+        focusElapsedTime = Math.floor((new Date() - focusStartTime) / 1000);
+        const hours = Math.floor(focusElapsedTime / 3600);
+        const minutes = Math.floor((focusElapsedTime % 3600) / 60);
+        const seconds = focusElapsedTime % 60;
+        
+        document.getElementById('focusTimer').textContent = 
+            `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+}
+
+function togglePause() {
+    isPaused = !isPaused;
+    const pauseButton = document.getElementById('pauseButton');
+    pauseButton.textContent = isPaused ? '继续' : '暂停';
+    
+    if (isPaused) {
+        clearInterval(focusInterval);
+    } else {
+        focusStartTime = new Date() - (focusElapsedTime * 1000);
+        focusInterval = setInterval(updateTimer, 1000);
+    }
+}
+
+function abandonFocus() {
+    if (confirm('确定要放弃当前的专注会话吗？')) {
+        endFocus(true);
+    }
+}
+
+function endFocus(isAbandoned = false) {
+    clearInterval(focusInterval);
+    document.getElementById('focusModal').style.display = 'none';
+    
+    if (currentTaskId) {
+        fetch(`/end_focus/${currentTaskId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                elapsed_time: focusElapsedTime,
+                abandoned: isAbandoned
+            })
+        }).then(() => {
+            // 刷新任务列表以更新专注时间
+            performSearch();
+        });
+    }
+    
+    currentTaskId = null;
+    focusElapsedTime = 0;
+}
+
+// 修改现有的开始专注按钮点击处理函数
+function handleStartFocusClick(taskId, taskName) {
+    startFocus(taskId, taskName);
+}
+
+// 页面加载完成后的初始化
+document.addEventListener('DOMContentLoaded', function() {
+    // 初始化任务卡片的专注按钮
+    const taskCards = document.querySelectorAll('.task-card');
+    taskCards.forEach(card => {
+        const focusBtn = card.querySelector('.focus-btn');
+        const focusStopBtn = card.querySelector('.focus-stop-btn');
+        
+        if (focusBtn && focusStopBtn) {
+            focusBtn.style.display = 'inline-block';
+            focusStopBtn.style.display = 'none';
+        }
+    });
+});
+</script>
+{% endblock %}

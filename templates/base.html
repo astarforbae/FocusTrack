@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>时间管理系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <style>
+        .task-card {
+            margin-bottom: 1rem;
+        }
+        .timer-display {
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+        .priority-高 {
+            color: #dc3545;
+        }
+        .priority-中 {
+            color: #ffc107;
+        }
+        .priority-低 {
+            color: #28a745;
+        }
+        .tag {
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .task-item {
+            transition: all 0.3s ease;
+        }
+        .task-item:hover {
+            transform: translateX(10px);
+        }
+        .priority-高 {
+            border-left: 4px solid #dc3545;
+        }
+        .priority-中 {
+            border-left: 4px solid #ffc107;
+        }
+        .priority-低 {
+            border-left: 4px solid #28a745;
+        }
+
+        /* Select2 样式修复 */
+        .select2-container {
+            width: 100% !important;
+            z-index: 9999;
+        }
+        .select2-dropdown {
+            z-index: 9999;
+        }
+        .modal-content .select2-container--open {
+            z-index: 9999;
+        }
+        .select2-container--open .select2-dropdown {
+            z-index: 9999;
+        }
+        .select2-container--open .select2-dropdown--above {
+            z-index: 9999;
+        }
+        .select2-container--open .select2-dropdown--below {
+            z-index: 9999;
+        }
+        .select2-results {
+            z-index: 9999;
+        }
+        .modal {
+            z-index: 1055 !important;
+        }
+        .modal-backdrop {
+            z-index: 1050 !important;
+        }
+        .select2-container {
+            z-index: 1056 !important;
+        }
+        .select2-dropdown {
+            z-index: 1056 !important;
+        }
+        .select2-container--open {
+            z-index: 1056 !important;
+        }
+        
+        /* 确保模态框可以关闭和交互 */
+        .modal-dialog {
+            z-index: 1055 !important;
+            pointer-events: auto;
+        }
+        
+        /* 确保模态框内的元素可以点击 */
+        .modal-content {
+            position: relative;
+            z-index: 1055 !important;
+            pointer-events: auto;
+        }
+        .select2-selection--multiple {
+            min-height: 38px !important;
+            border: 1px solid #ced4da !important;
+            border-radius: 0.25rem !important;
+        }
+        .select2-container--default.select2-container--focus .select2-selection--multiple {
+            border-color: #86b7fe !important;
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+        }
+        .select2-container--default .select2-selection--multiple .select2-selection__choice {
+            background-color: #0d6efd !important;
+            color: white !important;
+            border: none !important;
+            padding: 4px 8px !important;
+            margin: 3px 6px 3px 0 !important;
+            border-radius: 4px !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 6px !important;
+        }
+        .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+            position: relative !important;
+            color: rgba(255, 255, 255, 0.9) !important;
+            order: 1 !important;
+            font-size: 18px !important;
+            font-weight: 500 !important;
+            line-height: 1 !important;
+            background: none !important;
+            border: none !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 22px !important;
+            height: 22px !important;
+            border-radius: 50% !important;
+            transition: all 0.2s ease !important;
+            margin-left: 4px !important;
+            margin-right: -4px !important;
+            opacity: 0.85 !important;
+            padding: 0 !important;
+            cursor: pointer !important;
+        }
+        .select2-container--default .select2-selection--multiple .select2-selection__choice__remove span {
+            display: none !important;
+        }
+        .select2-container--default .select2-selection--multiple .select2-selection__choice__remove::before {
+            content: "×" !important;
+            display: block !important;
+            font-size: 20px !important;
+            line-height: 1 !important;
+            position: absolute !important;
+            top: 50% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) !important;
+        }
+        .select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover {
+            background-color: rgba(255, 255, 255, 0.25) !important;
+            color: white !important;
+            opacity: 1 !important;
+            transform: scale(1.15) !important;
+        }
+        .select2-container--default .select2-selection--multiple .select2-selection__choice {
+            background: linear-gradient(45deg, #0d6efd, #0b5ed7) !important;
+            color: white !important;
+            border: none !important;
+            padding: 4px 8px 4px 12px !important;
+            margin: 3px 6px 3px 0 !important;
+            border-radius: 20px !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 4px !important;
+            font-size: 0.875rem !important;
+            line-height: 1.5 !important;
+            box-shadow: 0 2px 4px rgba(13, 110, 253, 0.15) !important;
+            transition: all 0.2s ease !important;
+            min-height: 28px !important;
+        }
+        .select2-container--default .select2-selection--multiple .select2-selection__choice__display {
+            padding: 0 !important;
+            order: 0 !important;
+            font-weight: 500 !important;
+            display: inline-block !important;
+        }
+        .select2-container--default .select2-selection--multiple {
+            padding: 4px !important;
+            min-height: 42px !important;
+        }
+        .select2-container--default .select2-selection--multiple .select2-search--inline .select2-search__field {
+            margin-top: 3px !important;
+            margin-left: 6px !important;
+            height: 28px !important;
+        }
+
+        /* Select2 容器样式优化 */
+        .select2-container--default .select2-selection--multiple {
+            padding: 3px 8px !important;
+            min-height: 42px !important;
+            border: 1px solid #dee2e6 !important;
+            border-radius: 6px !important;
+            background-color: #fff !important;
+            transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out !important;
+        }
+
+        .select2-container--default.select2-container--focus .select2-selection--multiple {
+            border-color: #86b7fe !important;
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15) !important;
+        }
+
+        /* 标签样式优化 */
+        .select2-container--default .select2-selection--multiple .select2-selection__choice {
+            background: linear-gradient(45deg, #0d6efd, #0b5ed7) !important;
+            color: white !important;
+            border: none !important;
+            padding: 4px 10px !important;
+            margin: 3px 6px 3px 0 !important;
+            border-radius: 20px !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 6px !important;
+            font-size: 0.875rem !important;
+            line-height: 1.5 !important;
+            box-shadow: 0 2px 4px rgba(13, 110, 253, 0.15) !important;
+            transition: all 0.2s ease !important;
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-selection__choice:hover {
+            background: linear-gradient(45deg, #0b5ed7, #0a58ca) !important;
+            box-shadow: 0 3px 6px rgba(13, 110, 253, 0.2) !important;
+            transform: translateY(-1px) !important;
+        }
+
+        /* 优化移除按钮样式 */
+        .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+            color: rgba(255, 255, 255, 0.9) !important;
+            order: 1 !important;
+            font-size: 18px !important;  /* 增大字体大小 */
+            font-weight: 500 !important;  /* 加粗一点 */
+            line-height: 1 !important;
+            background: none !important;
+            border: none !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 22px !important;  /* 增大点击区域 */
+            height: 22px !important;  /* 增大点击区域 */
+            border-radius: 50% !important;
+            transition: all 0.2s ease !important;
+            margin-left: 4px !important;  /* 增加与文字的间距 */
+            margin-right: -4px !important;  /* 补偿右侧间距 */
+            opacity: 0.85 !important;
+            padding-bottom: 2px !important;  /* 微调垂直对齐 */
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover {
+            background-color: rgba(255, 255, 255, 0.25) !important;
+            color: white !important;
+        }
+
+        /* 调整标签内部布局以适应更大的关闭按钮 */
+        .select2-container--default .select2-selection--multiple .select2-selection__choice {
+            padding: 4px 8px 4px 12px !important;  /* 调整左右内边距 */
+            gap: 4px !important;  /* 调整文字和按钮之间的间距 */
+        }
+
+        /* 标签文字样式 */
+        .select2-container--default .select2-selection--multiple .select2-selection__choice__display {
+            padding: 0 !important;
+            order: 0 !important;
+            font-weight: 500 !important;
+        }
+
+        /* 搜索框样式优化 */
+        .select2-container--default .select2-selection--multiple .select2-search--inline .select2-search__field {
+            margin-top: 6px !important;
+            margin-left: 4px !important;
+            height: 24px !important;
+            font-size: 0.875rem !important;
+            color: #495057 !important;
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-search--inline .select2-search__field::placeholder {
+            color: #6c757d !important;
+            opacity: 0.7 !important;
+        }
+
+        /* 下拉选项样式优化 */
+        .select2-dropdown {
+            border-color: #dee2e6 !important;
+            border-radius: 6px !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+        }
+
+        .select2-container--default .select2-results__option--highlighted[aria-selected] {
+            background-color: #0d6efd !important;
+            color: white !important;
+        }
+
+        .select2-container--default .select2-results__option {
+            padding: 8px 12px !important;
+            font-size: 0.875rem !important;
+            transition: all 0.2s ease !important;
+        }
+
+        /* 专注会话模态框样式 */
+        .focus-modal {
+            position: fixed !important;
+            bottom: 20px !important;
+            right: 20px !important;
+            width: 300px !important; /* 放大到1.5倍 (200px * 1.5) */
+            background: white !important;
+            border-radius: 12px !important; /* 放大边框圆角 */
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15) !important;
+            z-index: 1060 !important;
+            max-height: 195px !important; /* 放大最大高度 (130px * 1.5) */
+        }
+
+        .focus-modal .modal-header {
+            background: linear-gradient(45deg, #0d6efd, #0b5ed7) !important;
+            color: white !important;
+            border-radius: 12px 12px 0 0 !important; /* 放大边框圆角 */
+            padding: 9px 15px !important; /* 放大内边距 */
+            display: flex !important;
+            align-items: center !important;
+            min-height: 48px !important; /* 放大最小高度 */
+        }
+
+        .focus-modal .modal-title {
+            font-size: 1.35rem !important; /* 放大字体 */
+            font-weight: 600 !important;
+            margin: 0 !important;
+        }
+
+        .focus-modal .btn-close {
+            color: white !important;
+            opacity: 0.8 !important;
+            transition: all 0.2s ease !important;
+            padding: 3px !important; /* 放大内边距 */
+            font-size: 1.05rem !important; /* 放大字体 */
+            margin: -3px !important; /* 放大外边距 */
+        }
+
+        .focus-modal .btn-close:hover {
+            opacity: 1 !important;
+            transform: scale(1.1) !important;
+        }
+
+        .focus-modal .modal-body {
+            padding: 12px 15px 7px 15px !important; /* 放大内边距 */
+        }
+
+        .focus-timer {
+            font-size: 2.4rem !important; /* 放大计时器字体 */
+            font-weight: 700 !important;
+            text-align: center !important;
+            color: #0d6efd !important;
+            margin: 3px 0 6px 0 !important; /* 放大外边距 */
+            font-family: monospace !important;
+            line-height: 1.2 !important;
+        }
+
+        .focus-task-name {
+            font-size: 1.28rem !important; /* 放大任务名称字体 */
+            font-weight: 500 !important;
+            text-align: center !important;
+            margin-bottom: 3px !important; /* 放大底部外边距 */
+            color: #212529 !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            line-height: 1.2 !important;
+        }
+
+        .focus-controls {
+            display: flex !important;
+            justify-content: center !important;
+            gap: 9px !important; /* 放大按钮间距 */
+            margin-top: 6px !important; /* 放大顶部外边距 */
+            margin-bottom: 0 !important;
+        }
+
+        .focus-controls .btn {
+            padding: 4px 15px !important; /* 放大按钮内边距 */
+            border-radius: 21px !important; /* 放大边框圆角 */
+            font-weight: 500 !important;
+            font-size: 1.2rem !important; /* 放大按钮字体 */
+            transition: all 0.2s ease !important;
+            line-height: 1.2 !important;
+        }
+
+        .focus-controls .btn:hover {
+            transform: translateY(-1px) !important;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+        }
+
+        .focus-controls .btn-pause {
+            background-color: #6c757d !important;
+            color: white !important;
+            border: none !important;
+        }
+
+        .focus-controls .btn-abandon {
+            background-color: #dc3545 !important;
+            color: white !important;
+            border: none !important;
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <div class="container py-4">
+        <h1 class="mb-4">时间管理系统</h1>
+        
+        <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4">
+            <div class="container-fluid">
+                <div class="navbar-nav">
+                    <a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}">任务列表</a>
+                    <a class="nav-link {% if request.endpoint == 'focus_history' %}active{% endif %}" href="{{ url_for('focus_history') }}">专注历史</a>
+                </div>
+            </div>
+        </nav>
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html> 
