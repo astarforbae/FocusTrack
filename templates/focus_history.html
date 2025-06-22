@@ -633,7 +633,7 @@
             // 格式化时间显示 (hh:mm:ss)
             const timeStr = formatTimeHMS(item.time);
             
-            console.log(`任务: ${taskName}, 时间: ${item.time}, 格式化时间: ${timeStr}`);
+            console.log(`任务: ${taskName}, 时间: ${item.time}, 格式化时间: ${timeStr}, 百分比: ${percentage}%`);
             
             // 添加到数据数组
             labels.push(`${taskName} (${percentage}%, ${timeStr})`);
@@ -650,7 +650,7 @@
         pieChart = new Chart(ctx, {
             type: 'pie',
             data: {
-                labels: labels,
+                labels: taskNames, // 只使用任务名称作为原始标签
                 datasets: [{
                     data: data,
                     backgroundColor: colors,
@@ -666,44 +666,30 @@
                         labels: {
                             boxWidth: 12,
                             padding: 15,
-                            // 处理长标签
                             generateLabels: function(chart) {
-                                const originalLabels = Chart.defaults.plugins.legend.labels.generateLabels(chart);
-                                originalLabels.forEach((label, i) => {
-                                    if (i < taskNames.length) {
-                                        // 使用taskNames数组获取任务名称
-                                        const taskName = taskNames[i] || "未命名任务";
-                                        
-                                        // 获取对应的数据值（时间）
+                                // 获取默认标签
+                                const original = Chart.overrides.pie.plugins.legend.labels.generateLabels(chart);
+                                
+                                // 自定义每个标签
+                                return original.map((label, i) => {
+                                    if (i < taskNames.length && i < data.length) {
                                         const value = data[i];
-                                        
-                                        // 计算百分比
                                         const percentage = ((value / totalTime) * 100).toFixed(1);
-                                        
-                                        // 格式化时间为 hh:mm:ss
                                         const timeStr = formatTimeHMS(value);
                                         
-                                        // 生成完整标签
-                                        let fullText = `${taskName} (${percentage}%, ${timeStr})`;
-                                        
-                                        // 如果标签太长，进行截断
-                                        if (fullText.length > 30 && taskName.length > 20) {
-                                            fullText = taskName.substring(0, 17) + `... (${percentage}%, ${timeStr})`;
-                                        }
-                                        
                                         // 更新标签文本
-                                        label.text = fullText;
+                                        label.text = `${taskNames[i]} (${percentage}%, ${timeStr})`;
                                     }
+                                    return label;
                                 });
-                                return originalLabels;
                             }
                         }
                     },
                     tooltip: {
                         callbacks: {
                             label: function(context) {
-                                const index = context.dataIndex;
                                 const value = context.raw;
+                                const index = context.dataIndex;
                                 
                                 // 计算百分比
                                 const percentage = ((value / totalTime) * 100).toFixed(1);
@@ -711,7 +697,7 @@
                                 // 格式化时间为 hh:mm:ss
                                 const timeStr = formatTimeHMS(value);
                                 
-                                // 使用存储的任务名称，检查索引是否有效
+                                // 使用存储的任务名称
                                 if (index < taskNames.length) {
                                     return `${taskNames[index]}: ${timeStr} (${percentage}%)`;
                                 } else {
