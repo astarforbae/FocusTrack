@@ -311,12 +311,14 @@ class SearchIndex:
             
         # Apply status filter
         if status:
-            status_matches = set(self.status_index[status.lower()])
+            status_matches = set(self.status_index.get(status.lower(), set()))
+            if not status_matches:  # 如果索引中没有匹配的状态，返回空列表
+                return []
             result_set &= status_matches
             
         # Apply tag filter
         if tag:
-            tag_matches = set(self.tag_index[tag.lower()])
+            tag_matches = set(self.tag_index.get(tag.lower(), set()))
             result_set &= tag_matches
             
         # Convert indices back to tasks
@@ -438,7 +440,6 @@ def add_task():
     description = request.form.get('description', '')
     priority = request.form.get('priority', '中')
     expected_time = request.form.get('expected_time')
-    tags_str = request.form.get('tags', '')
     
     # 处理预期时间
     if expected_time:
@@ -449,8 +450,8 @@ def add_task():
     else:
         expected_time = None
     
-    # 处理标签（逗号分隔的字符串）
-    tags = [tag.strip() for tag in tags_str.split(',') if tag.strip()]
+    # 处理标签（Select2多选）
+    tags = request.form.getlist('tags')
     
     if title:
         task = manager.add_task(title, description, priority, expected_time, tags)
@@ -691,8 +692,8 @@ def focus_history():
                              total_focus_time_str=cache_data['total_focus_time_str'],
                              total_tasks=cache_data['total_tasks'], 
                              completed_tasks=cache_data['completed_tasks'],
-                             chart_data=cache_data['chart_data'],
-                             timeline_data=cache_data['timeline_data'])
+                             chart_data=json.dumps(cache_data['chart_data']),
+                             timeline_data=json.dumps(cache_data['timeline_data']))
     
     # 获取该日期的所有专注会话
     sessions = manager.get_sessions_by_date(date_str)
@@ -765,8 +766,13 @@ def focus_history():
     total_focus_time_str = Task.format_time(total_focus_time) if tasks_data else "00:00:00"
     
     # 准备图表数据 - 使用已经缓存的颜色
-    chart_data = [{'task': task['title'], 'time': task['focus_time'], 'color': task['color']} 
-                 for task in tasks_data]
+    chart_data = []
+    for task in tasks_data:
+        chart_data.append({
+            'task': task['title'],  # 确保使用task作为属性名
+            'time': task['focus_time'],
+            'color': task['color']
+        })
     
     # 准备时间轴数据 - 预计算并一次性转换日期
     timeline_data = []

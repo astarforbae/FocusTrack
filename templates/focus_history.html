@@ -307,7 +307,7 @@
                     <div class="stats-icon text-primary">
                         <i class="bi bi-clock-history"></i>
                     </div>
-                    <div class="stats-number text-primary">{{ total_focus_time }}</div>
+                    <div class="stats-number text-primary">{{ total_focus_time_str }}</div>
                     <div class="stats-label">总专注时长</div>
                 </div>
             </div>
@@ -360,7 +360,7 @@
                         <button id="zoom-out" class="btn btn-sm btn-outline-secondary" title="缩小视图">
                             <i class="bi bi-zoom-out"></i>
                         </button>
-                        <input type="range" id="zoom-slider" class="zoom-slider" min="1" max="10" value="3" title="调整缩放级别">
+                        <input type="range" id="zoom-slider" class="zoom-slider" min="2" max="10" value="3" title="调整缩放级别">
                         <button id="zoom-in" class="btn btn-sm btn-outline-secondary" title="放大视图">
                             <i class="bi bi-zoom-in"></i>
                         </button>
@@ -431,12 +431,42 @@
 <script>
     // 全局变量
     let tasks = {{ tasks | tojson }};
-    let chartData = JSON.parse('{{ chart_data | safe }}');
-    let timelineData = JSON.parse('{{ timeline_data | safe }}');
+    let chartData, timelineData;
+    
+    try {
+        chartData = JSON.parse('{{ chart_data | safe }}');
+        timelineData = JSON.parse('{{ timeline_data | safe }}');
+        
+        // 调试输出每个任务的属性
+        if (chartData && chartData.length > 0) {
+            console.log("Chart Data 第一项属性:");
+            for (const key in chartData[0]) {
+                console.log(`- ${key}: ${chartData[0][key]}`);
+            }
+        }
+    } catch (e) {
+        console.error("Error parsing JSON data:", e);
+        chartData = [];
+        timelineData = [];
+    }
+    
     let pieChart = null;
     let currentSessionId = null; // 当前要删除的会话ID
     let currentZoomLevel = 3; // 默认缩放级别
     let maxDuration = 0; // 最长的专注时长，用于计算相对大小
+    
+    // 调试信息
+    console.log("Tasks:", tasks);
+    console.log("Chart Data:", chartData);
+    console.log("Timeline Data:", timelineData);
+    
+    // 格式化时间为 hh:mm:ss 格式
+    function formatTimeHMS(seconds) {
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
     
     // 初始化
     document.addEventListener('DOMContentLoaded', function() {
@@ -462,24 +492,49 @@
     
     // 处理并显示所有数据
     function processAndDisplayData() {
-        if (tasks.length === 0) {
+        console.log("开始处理数据...");
+        
+        // 确保缩放级别不小于2
+        if (currentZoomLevel < 2) {
+            currentZoomLevel = 2;
+            const zoomSlider = document.getElementById('zoom-slider');
+            if (zoomSlider) {
+                zoomSlider.value = currentZoomLevel;
+            }
+        }
+        
+        // 检查任务数据
+        if (!tasks || tasks.length === 0) {
+            console.log("没有任务数据");
             document.getElementById('no-data-alert').style.display = 'block';
             return;
         }
         
-        // 计算最长的专注时长
-        if (timelineData && timelineData.length > 0) {
-            maxDuration = Math.max(...timelineData.map(item => item.duration));
+        console.log(`任务数据: ${tasks.length} 个任务`);
+        
+        try {
+            // 计算最长的专注时长
+            if (timelineData && timelineData.length > 0) {
+                maxDuration = Math.max(...timelineData.map(item => item.duration));
+                console.log(`最长专注时长: ${maxDuration} 秒`);
+            } else {
+                console.log("没有时间轴数据");
+            }
+            
+            // 生成饼图
+            generatePieChart();
+            
+            // 生成时间轴
+            generateTimeline();
+            
+            // 填充表格数据
+            populateTable();
+            
+            console.log("数据处理完成");
+        } catch (error) {
+            console.error("处理数据时出错:", error);
+            document.getElementById('no-data-alert').style.display = 'block';
         }
-        
-        // 生成饼图
-        generatePieChart();
-        
-        // 生成时间轴
-        generateTimeline();
-        
-        // 填充表格数据
-        populateTable();
     }
     
     // 初始化时间轴控制
@@ -493,7 +548,7 @@
         
         // 缩小按钮
         document.getElementById('zoom-out').addEventListener('click', function() {
-            if (currentZoomLevel > 1) {
+            if (currentZoomLevel > 2) {
                 currentZoomLevel--;
                 zoomSlider.value = currentZoomLevel;
                 generateTimeline();
@@ -549,12 +604,42 @@
     
     // 生成饼图
     function generatePieChart() {
-        if (!chartData || chartData.length === 0) return;
+        // 检查是否有数据
+        if (!chartData || chartData.length === 0) {
+            console.log("没有饼图数据可显示");
+            return;
+        }
+        
+        console.log("生成饼图，数据:", chartData);
+        
+        // 计算总专注时间
+        const totalTime = chartData.reduce((sum, item) => sum + item.time, 0);
         
         // 准备饼图数据
-        const labels = chartData.map(item => item.task);
-        const data = chartData.map(item => item.time);
-        const backgroundColors = chartData.map(item => item.color);
+        const labels = [];
+        const data = [];
+        const colors = [];
+        const taskNames = [];
+        
+        // 为每个任务准备数据
+        chartData.forEach(item => {
+            // 确保任务名称存在
+            const taskName = item.task || "未命名任务";
+            taskNames.push(taskName);
+            
+            // 计算百分比
+            const percentage = ((item.time / totalTime) * 100).toFixed(1);
+            
+            // 格式化时间显示 (hh:mm:ss)
+            const timeStr = formatTimeHMS(item.time);
+            
+            console.log(`任务: ${taskName}, 时间: ${item.time}, 格式化时间: ${timeStr}`);
+            
+            // 添加到数据数组
+            labels.push(`${taskName} (${percentage}%, ${timeStr})`);
+            data.push(item.time);
+            colors.push(item.color || "#4e73df");
+        });
         
         // 创建饼图
         const ctx = document.getElementById('pie-chart').getContext('2d');
@@ -568,7 +653,7 @@
                 labels: labels,
                 datasets: [{
                     data: data,
-                    backgroundColor: backgroundColors,
+                    backgroundColor: colors,
                     borderWidth: 1
                 }]
             },
@@ -580,16 +665,58 @@
                         position: 'right',
                         labels: {
                             boxWidth: 12,
-                            padding: 15
+                            padding: 15,
+                            // 处理长标签
+                            generateLabels: function(chart) {
+                                const originalLabels = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+                                originalLabels.forEach((label, i) => {
+                                    if (i < taskNames.length) {
+                                        // 使用taskNames数组获取任务名称
+                                        const taskName = taskNames[i] || "未命名任务";
+                                        
+                                        // 获取对应的数据值（时间）
+                                        const value = data[i];
+                                        
+                                        // 计算百分比
+                                        const percentage = ((value / totalTime) * 100).toFixed(1);
+                                        
+                                        // 格式化时间为 hh:mm:ss
+                                        const timeStr = formatTimeHMS(value);
+                                        
+                                        // 生成完整标签
+                                        let fullText = `${taskName} (${percentage}%, ${timeStr})`;
+                                        
+                                        // 如果标签太长，进行截断
+                                        if (fullText.length > 30 && taskName.length > 20) {
+                                            fullText = taskName.substring(0, 17) + `... (${percentage}%, ${timeStr})`;
+                                        }
+                                        
+                                        // 更新标签文本
+                                        label.text = fullText;
+                                    }
+                                });
+                                return originalLabels;
+                            }
                         }
                     },
                     tooltip: {
                         callbacks: {
                             label: function(context) {
+                                const index = context.dataIndex;
                                 const value = context.raw;
-                                const hours = Math.floor(value / 3600);
-                                const minutes = Math.floor((value % 3600) / 60);
-                                return `${context.label}: ${hours}小时${minutes}分钟`;
+                                
+                                // 计算百分比
+                                const percentage = ((value / totalTime) * 100).toFixed(1);
+                                
+                                // 格式化时间为 hh:mm:ss
+                                const timeStr = formatTimeHMS(value);
+                                
+                                // 使用存储的任务名称，检查索引是否有效
+                                if (index < taskNames.length) {
+                                    return `${taskNames[index]}: ${timeStr} (${percentage}%)`;
+                                } else {
+                                    return `未知任务: ${timeStr} (${percentage}%)`;
+                                }
                             }
                         }
                     }
@@ -600,6 +727,15 @@
     
     // 生成时间轴
     function generateTimeline() {
+        // 确保缩放级别不小于2
+        if (currentZoomLevel < 2) {
+            currentZoomLevel = 2;
+            const zoomSlider = document.getElementById('zoom-slider');
+            if (zoomSlider) {
+                zoomSlider.value = currentZoomLevel;
+            }
+        }
+        
         const container = document.getElementById('timeline-container');
         container.innerHTML = '';
         
@@ -775,10 +911,10 @@
                     return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
                 };
                 
-                taskTime.textContent = `${formatTime(startTime)} - ${formatTime(endTime)} (${durationText})`;
+                taskTime.textContent = `${formatTime(startTime)} - ${formatTime(endTime)} (${formatTimeHMS(item.duration)})`;
                 
                 // 添加工具提示
-                taskBlock.title = `${item.task_title}\n${formatTime(startTime)} - ${formatTime(endTime)}\n时长: ${durationText}`;
+                taskBlock.title = `${item.task_title}\n${formatTime(startTime)} - ${formatTime(endTime)}\n时长: ${formatTimeHMS(item.duration)}`;
                 
                 // 如果高度足够，显示任务名称和时间
                 if (actualHeight > 3) {

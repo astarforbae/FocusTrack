@@ -320,10 +320,19 @@ function performSearch() {
     const params = new URLSearchParams();
     
     // 添加所有非空搜索参数
+    let hasStatusFilter = false;
     for (let [key, value] of formData.entries()) {
         if (value) {  // 只添加非空值
             params.append(key, value);
+            if (key === 'status') {
+                hasStatusFilter = true;
+            }
         }
+    }
+    
+    // 如果没有状态过滤参数，默认添加"未完成"状态
+    if (!hasStatusFilter) {
+        params.append('status', '未完成');
     }
     
     // 显示加载状态
