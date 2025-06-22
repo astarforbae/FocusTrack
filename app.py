@@ -162,8 +162,11 @@ class TimeManager:
             task.status = "已完成"
             task.completed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.save_tasks()
-            # Update index for this task only
+            # 更新任务索引
             search_index.update_task(task)
+            # 清除任务视图缓存，确保下次请求时重新加载
+            if hasattr(self, 'task_view_cache'):
+                self.task_view_cache = {}
             return True
         return False
 
@@ -173,8 +176,11 @@ class TimeManager:
             task.status = "未完成"
             task.completed_at = None
             self.save_tasks()
-            # Update index for this task only
+            # 更新任务索引
             search_index.update_task(task)
+            # 清除任务视图缓存，确保下次请求时重新加载
+            if hasattr(self, 'task_view_cache'):
+                self.task_view_cache = {}
             return True
         return False
 
@@ -232,12 +238,68 @@ class SearchIndex:
             self.tag_index[tag.lower()].append(task_idx)
 
     def update_task(self, task):
-        """更新任务索引，只更新单个任务而不是整个索引"""
-        # 首先从索引中移除该任务
-        self.remove_task(task)
-        # 然后将更新后的任务重新添加到索引中
-        self.add_task(task)
-        
+        """更新任务索引，确保完全重建索引条目"""
+        # 首先尝试找到任务在列表中的当前位置
+        try:
+            task_idx = next(i for i, t in enumerate(self.tasks) if t.id == task.id)
+            # 获取旧的任务对象，用于从索引中移除旧的数据
+            old_task = self.tasks[task_idx]
+            
+            # 从索引中完全移除旧的数据
+            # 先从状态索引中移除
+            old_status = old_task.status.lower()
+            if task_idx in self.status_index[old_status]:
+                self.status_index[old_status].remove(task_idx)
+            
+            # 从标题索引中移除
+            for word in re.findall(r'\w+', old_task.title.lower()):
+                if word in self.title_index and task_idx in self.title_index[word]:
+                    self.title_index[word].remove(task_idx)
+            
+            # 从描述索引中移除
+            if old_task.description:
+                for word in re.findall(r'\w+', old_task.description.lower()):
+                    if word in self.description_index and task_idx in self.description_index[word]:
+                        self.description_index[word].remove(task_idx)
+            
+            # 从优先级索引中移除
+            old_priority = old_task.priority.lower()
+            if task_idx in self.priority_index[old_priority]:
+                self.priority_index[old_priority].remove(task_idx)
+            
+            # 从标签索引中移除
+            for tag in old_task.tags:
+                tag_key = tag.lower()
+                if tag_key in self.tag_index and task_idx in self.tag_index[tag_key]:
+                    self.tag_index[tag_key].remove(task_idx)
+            
+            # 更新任务列表中的任务对象
+            self.tasks[task_idx] = task
+            
+            # 重新添加新的索引条目
+            # 索引标题
+            for word in re.findall(r'\w+', task.title.lower()):
+                self.title_index[word].append(task_idx)
+            
+            # 索引描述
+            if task.description:
+                for word in re.findall(r'\w+', task.description.lower()):
+                    self.description_index[word].append(task_idx)
+            
+            # 索引优先级
+            self.priority_index[task.priority.lower()].append(task_idx)
+            
+            # 索引状态
+            self.status_index[task.status.lower()].append(task_idx)
+            
+            # 索引标签
+            for tag in task.tags:
+                self.tag_index[tag.lower()].append(task_idx)
+                
+        except StopIteration:
+            # 如果任务不在列表中，则直接添加它
+            self.add_task(task)
+
     def remove_task(self, task):
         """从索引中删除指定任务"""
         # 找到任务在tasks列表中的索引
@@ -310,11 +372,16 @@ class SearchIndex:
             result_set &= priority_matches
             
         # Apply status filter
-        if status:
-            status_matches = set(self.status_index.get(status.lower(), set()))
-            if not status_matches:  # 如果索引中没有匹配的状态，返回空列表
+        if status is not None:  # 只有当status不是None时才过滤状态
+            status_key = status.lower()
+            # 检查是否有该状态的索引
+            if status_key in self.status_index:
+                status_matches = set(self.status_index[status_key])
+                result_set &= status_matches
+            else:
+                # 如果索引中没有匹配的状态，返回空列表
                 return []
-            result_set &= status_matches
+        # 注意: 如果状态过滤为None，则保留所有结果
             
         # Apply tag filter
         if tag:
@@ -338,13 +405,24 @@ initialize_index()
 
 @app.route('/')
 def index():
+    # 每次访问主页都重新初始化搜索索引，确保任务状态正确
+    initialize_index()
+    
     tasks = manager.get_tasks()
     
     # 获取查询参数
     search_query = request.args.get('search', '')
     sort_by = request.args.get('sort_by', 'created_at')  # 默认按创建时间排序
     sort_order = request.args.get('sort_order', 'desc')  # 默认降序
-    filter_status = request.args.get('status', '未完成')  # 默认只显示未完成任务
+    
+    # 处理状态过滤参数 - 如果status参数不存在于请求中，默认为"未完成"；如果存在但为空，表示查看所有状态
+    if 'status' in request.args:
+        filter_status = request.args.get('status')
+        if filter_status == '':
+            filter_status = None  # None 表示不进行状态过滤
+    else:
+        filter_status = '未完成'  # 默认只显示未完成任务
+        
     filter_tag = request.args.get('tag', '')  # 默认不过滤标签
     priority_filter = request.args.get('priority', '')  # 默认不按优先级过滤
     
@@ -368,26 +446,13 @@ def index():
         tasks_data = manager.task_view_cache[cache_key]
         all_tags = manager.all_tags_cache if hasattr(manager, 'all_tags_cache') else set()
     else:
-        # 过滤任务
-        filtered_tasks = []
-        for task in tasks:
-            # 状态过滤
-            if filter_status and task.status != filter_status:
-                continue
-            
-            # 标签过滤
-            if filter_tag and filter_tag not in task.tags:
-                continue
-                
-            # 优先级过滤
-            if priority_filter and task.priority != priority_filter:
-                continue
-                
-            # 简单的搜索过滤
-            if search_query and search_query.lower() not in task.title.lower() and search_query.lower() not in task.description.lower():
-                continue
-            
-            filtered_tasks.append(task)
+        # 使用搜索索引进行过滤
+        filtered_tasks = search_index.search(
+            query=search_query,
+            priority=priority_filter,
+            status=filter_status,
+            tag=filter_tag
+        )
         
         # 排序任务
         if sort_by == 'created_at':
@@ -424,12 +489,15 @@ def index():
         manager.task_view_cache[cache_key] = tasks_data
         manager.all_tags_cache = all_tags
     
+    # 将None值转换回空字符串用于前端显示
+    display_status = filter_status if filter_status is not None else ""
+    
     return render_template('index.html', 
                           tasks=tasks_data, 
                           all_tags=sorted(all_tags), 
                           search_query=search_query,
                           priority_filter=priority_filter, 
-                          status_filter=filter_status, 
+                          status_filter=display_status, 
                           tag_filter=filter_tag,
                           sort_by=sort_by,
                           sort_order=sort_order)
@@ -462,7 +530,12 @@ def add_task():
 
 @app.route('/complete_task/<task_id>')
 def complete_task(task_id):
-    manager.complete_task(task_id)
+    success = manager.complete_task(task_id)
+    
+    # 重新初始化搜索索引确保数据一致性
+    if success:
+        initialize_index()
+    
     # 获取当前的搜索参数
     search_query = request.args.get('search', '')
     priority_filter = request.args.get('priority', '')
@@ -488,7 +561,12 @@ def complete_task(task_id):
 
 @app.route('/uncomplete_task/<task_id>')
 def uncomplete_task(task_id):
-    manager.uncomplete_task(task_id)
+    success = manager.uncomplete_task(task_id)
+    
+    # 重新初始化搜索索引确保数据一致性
+    if success:
+        initialize_index()
+    
     # 获取当前的搜索参数
     search_query = request.args.get('search', '')
     priority_filter = request.args.get('priority', '')
@@ -514,7 +592,12 @@ def uncomplete_task(task_id):
 
 @app.route('/delete_task/<task_id>')
 def delete_task(task_id):
-    manager.delete_task(task_id)
+    success = manager.delete_task(task_id)
+    
+    # 重新初始化搜索索引确保数据一致性
+    if success:
+        initialize_index()
+    
     # 获取当前的搜索参数
     search_query = request.args.get('search', '')
     priority_filter = request.args.get('priority', '')
@@ -574,10 +657,19 @@ def stop_timer(task_id):
 
 @app.route('/search', methods=['GET'])
 def search():
+    # 重新初始化索引确保数据一致性
+    initialize_index()
+    
     # Get search parameters
     search_query = request.args.get('search', '')
     priority_filter = request.args.get('priority', '')
-    status_filter = request.args.get('status', '')
+    
+    # 处理状态过滤参数 - 如果status参数不存在于请求中，表示查看所有状态
+    if 'status' in request.args:
+        status_filter = request.args.get('status')
+    else:
+        status_filter = None  # None 表示不进行状态过滤
+        
     tag_filter = request.args.get('tag', '')
     
     # 获取排序参数
@@ -867,4 +959,4 @@ def delete_focus_session(session_id):
     return jsonify({'success': False, 'error': '找不到指定的专注会话'}), 404
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=12347, debug=True)
+    app.run(host='0.0.0.0', port=12345, debug=True)

@@ -292,13 +292,13 @@ function resetSearch() {
             input.value = 'created_at'; // 重置为默认排序字段
         } else if (input.name === 'sort_order') {
             input.value = 'desc'; // 重置为默认排序顺序
-        } else if (input.name === 'status') {
-            input.value = '未完成'; // 重置为默认只显示未完成任务
         } else {
-            input.value = '';
+            input.value = ''; // 清空所有其他过滤条件，包括状态
         }
     });
-    window.location.href = window.location.pathname + '?status=未完成'; // 重定向时保持显示未完成任务
+    
+    // 重置后立即执行搜索，而不是强制重定向
+    performSearch();
 }
 
 function debounce(func, wait) {
@@ -319,18 +319,21 @@ function performSearch() {
     const formData = new FormData(searchForm);
     const params = new URLSearchParams();
     
-    // 添加所有非空搜索参数
+    // 添加所有非空搜索参数，但状态为空字符串时代表"所有状态"，需要特殊处理
     let hasStatusFilter = false;
     for (let [key, value] of formData.entries()) {
-        if (value) {  // 只添加非空值
-            params.append(key, value);
-            if (key === 'status') {
-                hasStatusFilter = true;
+        if (key === 'status') {
+            hasStatusFilter = true;
+            // 空字符串表示"所有状态"，此时不添加status参数
+            if (value !== "") {
+                params.append(key, value);
             }
+        } else if (value) {  // 其他参数只添加非空值
+            params.append(key, value);
         }
     }
     
-    // 如果没有状态过滤参数，默认添加"未完成"状态
+    // 如果表单中完全没有status字段，默认添加"未完成"状态
     if (!hasStatusFilter) {
         params.append('status', '未完成');
     }
