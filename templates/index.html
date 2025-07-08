@@ -77,12 +77,6 @@
                         <button class="btn btn-sm btn-primary" onclick="handleStartFocusClick('{{ task.id }}', '{{ task.title }}')">
                             开始专注
                         </button>
-                        <button class="btn btn-sm btn-outline-secondary" onclick="editTask('{{ task.id }}')">
-                            编辑
-                        </button>
-                        <button class="btn btn-sm btn-outline-danger" onclick="deleteTask('{{ task.id }}')">
-                            删除
-                        </button>
                     </div>
                 </h5>
                 <p class="card-text">{{ task.description }}</p>
@@ -121,6 +115,17 @@
                     <a href="{{ url_for('uncomplete_task', task_id=task.id) }}" class="btn btn-warning btn-sm">
                         <i class="bi bi-arrow-counterclockwise"></i> 置为未完成
                     </a>
+                    
+                    <!-- 任务总结按钮 -->
+                    {% if task.summary %}
+                    <button class="btn btn-info btn-sm" onclick="showSummary('{{ task.id }}', '{{ task.title }}', `{{ task.summary }}`)">
+                        <i class="bi bi-eye"></i> 查看总结
+                    </button>
+                    {% else %}
+                    <a href="{{ url_for('complete_task', task_id=task.id) }}" class="btn btn-outline-info btn-sm">
+                        <i class="bi bi-pencil"></i> 添加总结
+                    </a>
+                    {% endif %}
                     {% endif %}
                     <a href="{{ url_for('delete_task', task_id=task.id) }}" class="btn btn-danger btn-sm" 
                        onclick="return confirm('确定要删除这个任务吗？')">
@@ -192,6 +197,25 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
                 <button type="submit" form="addTaskForm" class="btn btn-primary">添加</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 添加任务总结查看模态框 -->
+<div class="modal fade" id="summaryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="summaryModalTitle">任务总结</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="summaryContent" style="white-space: pre-wrap;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                <a id="editSummaryBtn" href="#" class="btn btn-primary">编辑总结</a>
             </div>
         </div>
     </div>
@@ -375,12 +399,6 @@ function performSearch() {
                                             <button class="btn btn-sm btn-primary" onclick="handleStartFocusClick('${escapeHtml(task.id)}', '${escapeHtml(task.title)}')">
                                                 开始专注
                                             </button>
-                                            <button class="btn btn-sm btn-outline-secondary" onclick="editTask('${escapeHtml(task.id)}')">
-                                                编辑
-                                            </button>
-                                            <button class="btn btn-sm btn-outline-danger" onclick="deleteTask('${escapeHtml(task.id)}')">
-                                                删除
-                                            </button>
                                         </div>
                                     </h5>
                                     <p class="card-text">${escapeHtml(task.description)}</p>
@@ -413,6 +431,15 @@ function performSearch() {
                                             <a href="/uncomplete_task/${task.id}" class="btn btn-warning btn-sm">
                                                 <i class="bi bi-arrow-counterclockwise"></i> 置为未完成
                                             </a>
+                                            ${task.summary ? `
+                                            <button class="btn btn-info btn-sm" onclick="showSummary('${escapeHtml(task.id)}', '${escapeHtml(task.title)}', \`${escapeHtml(task.summary)}\`)">
+                                                <i class="bi bi-eye"></i> 查看总结
+                                            </button>
+                                            ` : `
+                                            <a href="/complete_task/${task.id}" class="btn btn-outline-info btn-sm">
+                                                <i class="bi bi-pencil"></i> 添加总结
+                                            </a>
+                                            `}
                                         `}
                                         <a href="/delete_task/${task.id}" class="btn btn-danger btn-sm" 
                                            onclick="return confirm('确定要删除这个任务吗？')">
@@ -551,5 +578,15 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+// 显示任务总结的函数
+function showSummary(taskId, taskTitle, summary) {
+    document.getElementById('summaryModalTitle').textContent = `总结: ${taskTitle}`;
+    document.getElementById('summaryContent').textContent = summary;
+    document.getElementById('editSummaryBtn').href = `/complete_task/${taskId}`;
+    
+    const summaryModal = new bootstrap.Modal(document.getElementById('summaryModal'));
+    summaryModal.show();
+}
 </script>
 {% endblock %}

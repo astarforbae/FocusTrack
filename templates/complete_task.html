@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="card mt-4">
+        <div class="card-header bg-success text-white">
+            <h4>完成任务: {{ task.title }}</h4>
+        </div>
+        <div class="card-body">
+            <form action="{{ url_for('complete_task', task_id=task.id) }}" method="POST">
+                <div class="mb-3">
+                    <label for="summary" class="form-label">任务总结</label>
+                    <textarea class="form-control" id="summary" name="summary" rows="5" placeholder="请输入任务完成总结，总结您的收获、遇到的问题和解决方案等..."></textarea>
+                    <div class="form-text">总结您完成任务的过程、结果和收获，便于以后回顾和复盘。</div>
+                </div>
+                
+                <div class="mb-3">
+                    <p><strong>任务描述:</strong> {{ task.description or '无描述' }}</p>
+                    <p><strong>优先级:</strong> {{ task.priority }}</p>
+                    <p><strong>创建时间:</strong> {{ task.created_at }}</p>
+                    {% if task.tags %}
+                    <p><strong>标签:</strong> 
+                        {% for tag in task.tags %}
+                        <span class="badge bg-light text-dark">{{ tag }}</span>
+                        {% endfor %}
+                    </p>
+                    {% endif %}
+                </div>
+
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('index') }}" class="btn btn-secondary">取消</a>
+                    <button type="submit" class="btn btn-success">完成任务并保存总结</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %} 

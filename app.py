@@ -1,13 +1,24 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
 from datetime import datetime, timedelta
 import json
 import os
 from task import Task, FocusSession
 from collections import defaultdict
 import re
+import uuid
+import copy
+import time
 
 app = Flask(__name__)
+app.secret_key = 'time_manager_secret_key'
 app.config['SECRET_KEY'] = 'your-secret-key-here'  # 用于表单安全
+
+# 添加自定义过滤器，用于将换行符转换为HTML的<br>标签
+@app.template_filter('nl2br')
+def nl2br_filter(text):
+    if not text:
+        return ""
+    return text.replace('\n', '<br>')
 
 # 数据文件路径
 DATA_FILE = 'tasks.json'
@@ -156,11 +167,12 @@ class TimeManager:
                 return task
         return None
 
-    def complete_task(self, task_id):
+    def complete_task(self, task_id, summary=None):
         task = self.get_task_by_id(task_id)
         if task:
             task.status = "已完成"
             task.completed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            task.summary = summary
             self.save_tasks()
             # 更新任务索引
             search_index.update_task(task)
@@ -507,15 +519,11 @@ def add_task():
     title = request.form.get('title')
     description = request.form.get('description', '')
     priority = request.form.get('priority', '中')
-    expected_time = request.form.get('expected_time')
+    expected_time_str = request.form.get('expected_time', '')
     
-    # 处理预期时间
-    if expected_time:
-        try:
-            expected_time = int(expected_time)
-        except ValueError:
-            expected_time = None
-    else:
+    try:
+        expected_time = int(expected_time_str) if expected_time_str else None
+    except ValueError:
         expected_time = None
     
     # 处理标签（Select2多选）
@@ -528,9 +536,17 @@ def add_task():
         return redirect('/')
     return redirect('/')
 
-@app.route('/complete_task/<task_id>')
+@app.route('/complete_task/<task_id>', methods=['GET', 'POST'])
 def complete_task(task_id):
-    success = manager.complete_task(task_id)
+    if request.method == 'POST':
+        summary = request.form.get('summary', '')
+        success = manager.complete_task(task_id, summary)
+    else:
+        # 如果是GET请求，显示任务完成表单
+        task = manager.get_task_by_id(task_id)
+        if task:
+            return render_template('complete_task.html', task=task)
+        return redirect('/')
     
     # 重新初始化搜索索引确保数据一致性
     if success:
@@ -808,14 +824,39 @@ def focus_history():
     task_sessions = {}
     task_colors = {}
     
+    # 创建一个基于任务总数的预定义颜色列表
+    def generate_distinct_colors(num_tasks):
+        """生成足够多的不同颜色，使用均匀分布的HSL色调"""
+        colors = []
+        for i in range(num_tasks):
+            # 计算均匀分布的色调值，确保最大色调差异
+            hue = int(i * (360 / max(1, num_tasks))) % 360
+            # 随机调整饱和度和亮度，保持颜色鲜艳
+            saturation = 70 + (hash(str(i)) % 20)
+            lightness = 40 + (hash(str(i + 100)) % 20)
+            colors.append(f"hsl({hue}, {saturation}%, {lightness}%)")
+        return colors
+    
+    # 先获取任务ID列表
+    distinct_task_ids = []
+    for session in sessions:
+        if session.end_time and not session.abandoned:
+            task_id = session.task_id
+            if task_id not in distinct_task_ids:
+                distinct_task_ids.append(task_id)
+    
+    # 为每个任务生成唯一颜色
+    distinct_colors = generate_distinct_colors(len(distinct_task_ids))
+    task_color_map = {task_id: distinct_colors[i] for i, task_id in enumerate(distinct_task_ids)}
+    
     for session in sessions:
         if session.end_time and not session.abandoned:  # 只统计已结束且未放弃的会话
             task_id = session.task_id
             if task_id not in task_times:
                 task_times[task_id] = 0
                 task_sessions[task_id] = []
-                # 预先计算颜色并缓存
-                task_colors[task_id] = f"hsl({hash(task_id) % 360}, 70%, 50%)"
+                # 使用预先生成的唯一颜色
+                task_colors[task_id] = task_color_map.get(task_id, f"hsl({hash(task_id) % 360}, 70%, 50%)")  # 后面的是备用方案
             
             task_times[task_id] += session.duration
             task_sessions[task_id].append(session)
@@ -957,6 +998,32 @@ def delete_focus_session(session_id):
         # focus_history路由会处理空日期的情况
         return jsonify({'success': True, 'redirect': f'/focus_history?date={date_str}'})
     return jsonify({'success': False, 'error': '找不到指定的专注会话'}), 404
+
+@app.route('/view_summary/<task_id>')
+def view_summary(task_id):
+    task = manager.get_task_by_id(task_id)
+    if task and task.status == "已完成":
+        return render_template('view_summary.html', task=task)
+    else:
+        flash('任务不存在或尚未完成！', 'warning')
+        return redirect(url_for('index'))
+
+@app.route('/edit_summary/<task_id>', methods=['GET', 'POST'])
+def edit_summary(task_id):
+    task = manager.get_task_by_id(task_id)
+    if not task:
+        flash('任务不存在！', 'warning')
+        return redirect(url_for('index'))
+        
+    if request.method == 'POST':
+        summary = request.form.get('summary', '')
+        task.summary = summary
+        manager.save_tasks()
+        search_index.update_task(task)
+        flash('总结已更新！', 'success')
+        return redirect(url_for('view_summary', task_id=task.id))
+    
+    return render_template('edit_summary.html', task=task)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=12345, debug=True)

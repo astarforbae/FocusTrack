@@ -2,7 +2,7 @@ from datetime import datetime
 import uuid
 
 class Task:
-    def __init__(self, title, description="", priority="中", status="未完成", expected_time=None, tags=None):
+    def __init__(self, title, description="", priority="中", status="未完成", expected_time=None, tags=None, summary=None):
         self.id = str(uuid.uuid4())  # 生成唯一ID
         self.title = title
         self.description = description
@@ -12,6 +12,7 @@ class Task:
         self.completed_at = None
         self.expected_time = expected_time  # 预期完成时间（分钟）
         self.tags = tags or []  # 标签列表
+        self.summary = summary  # 任务完成总结
 
     def to_dict(self):
         return {
@@ -23,7 +24,8 @@ class Task:
             "created_at": self.created_at,
             "completed_at": self.completed_at,
             "expected_time": self.expected_time,
-            "tags": self.tags
+            "tags": self.tags,
+            "summary": self.summary
         }
 
     @classmethod
@@ -34,7 +36,8 @@ class Task:
             data["priority"], 
             data["status"],
             data.get("expected_time"),
-            data.get("tags", [])
+            data.get("tags", []),
+            data.get("summary")
         )
         task.id = data.get("id", str(uuid.uuid4()))  # 如果没有ID，生成新的
         task.created_at = data["created_at"]

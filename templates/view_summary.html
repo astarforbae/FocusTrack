@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="card mt-4">
+        <div class="card-header bg-info text-white">
+            <h4>任务总结: {{ task.title }}</h4>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-8">
+                    <h5>任务总结</h5>
+                    {% if task.summary %}
+                    <div class="p-3 bg-light rounded">
+                        <p>{{ task.summary|nl2br }}</p>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-warning">
+                        此任务没有总结信息。
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-header">任务详情</div>
+                        <div class="card-body">
+                            <p><strong>优先级:</strong> <span class="priority-{{ task.priority }}">{{ task.priority }}</span></p>
+                            <p><strong>创建时间:</strong> {{ task.created_at }}</p>
+                            <p><strong>完成时间:</strong> {{ task.completed_at }}</p>
+                            {% if task.description %}
+                            <p><strong>任务描述:</strong> {{ task.description }}</p>
+                            {% endif %}
+                            {% if task.tags %}
+                            <p><strong>标签:</strong>
+                                {% for tag in task.tags %}
+                                <span class="badge bg-light text-dark">{{ tag }}</span>
+                                {% endfor %}
+                            </p>
+                            {% endif %}
+                            <p><strong>预期时长:</strong> {{ task.expected_time_str }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-4">
+                <a href="{{ url_for('index') }}" class="btn btn-secondary">返回任务列表</a>
+                {% if not task.summary %}
+                <a href="{{ url_for('complete_task', task_id=task.id) }}" class="btn btn-primary">添加总结</a>
+                {% else %}
+                <a href="{{ url_for('edit_summary', task_id=task.id) }}" class="btn btn-primary">编辑总结</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 
