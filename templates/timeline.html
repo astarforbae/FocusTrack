@@ -1,0 +1,568 @@
+{% extends "base.html" %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<!-- Vis.js Timeline CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vis-timeline@7.7.2/dist/vis-timeline-graph2d.min.css">
+<style>
+    /* 页面容器样式 */
+    .timeline-page {
+        padding: 20px 0;
+    }
+    
+    /* 标题与导航栏 */
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    /* 日期选择器样式 */
+    .date-picker-container {
+        position: relative;
+        max-width: 300px;
+    }
+    .date-picker-container .input-group-text {
+        background-color: #0d6efd;
+        color: white;
+        border: none;
+    }
+    .flatpickr-input {
+        border-radius: 0 0.25rem 0.25rem 0 !important;
+    }
+    
+    /* 时间轴容器样式 */
+    #visualization {
+        height: 600px;
+        border: 1px solid #eee;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    
+    /* 自定义 vis.js 时间轴样式 */
+    .vis-item {
+        border-radius: 4px;
+        border-color: rgba(0, 0, 0, 0.15) !important;
+    }
+    
+    .vis-item.vis-selected {
+        border-color: #212529 !important;
+        border-width: 2px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.15);
+    }
+    
+    .vis-item .vis-item-content {
+        padding: 6px 10px;
+        font-size: 0.9rem;
+    }
+    
+    .vis-item .vis-item-overflow {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    
+    /* 隐藏时间轴项目内容 */
+    .vis-item.timeline-empty-content .vis-item-content {
+        color: transparent;
+    }
+    
+    /* 时间轴控制面板 */
+    .timeline-controls {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background-color: #f8f9fa;
+        padding: 10px 15px;
+        border-radius: 8px;
+        margin-bottom: 15px;
+        border: 1px solid #e9ecef;
+    }
+    
+    .timeline-controls .btn-group {
+        display: flex;
+        gap: 5px;
+    }
+    
+    /* 返回按钮 */
+    .back-button {
+        margin-right: 10px;
+    }
+    
+    /* 无数据提示 */
+    .no-data-card {
+        padding: 40px;
+        text-align: center;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+    }
+    .no-data-icon {
+        font-size: 3rem;
+        color: #adb5bd;
+        margin-bottom: 15px;
+    }
+    
+    /* 自定义tooltip样式 */
+    .vis-tooltip {
+        position: absolute;
+        background-color: #ffffff;
+        border: 1px solid #e9ecef;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        border-radius: 4px;
+        padding: 8px 12px;
+        font-size: 0.85rem;
+        z-index: 10000;
+        pointer-events: none;
+    }
+    
+    .tooltip-title {
+        font-weight: 600;
+        margin-bottom: 4px;
+        color: #212529;
+    }
+    
+    .tooltip-time {
+        color: #6c757d;
+        margin-bottom: 3px;
+    }
+    
+    .tooltip-duration {
+        font-weight: 500;
+        color: #0d6efd;
+    }
+    
+    /* 时间格式化 */
+    .vis-time-axis .vis-text {
+        font-size: 0.85rem;
+        color: #6c757d;
+    }
+    
+    /* 时间轴控制按钮 */
+    .timeline-zoom-controls .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    /* 视图切换按钮 */
+    .timeline-view-btn.active {
+        background-color: #0d6efd;
+        color: white;
+    }
+    
+    /* 图例样式 */
+    .timeline-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 20px;
+        margin-bottom: 20px;
+        padding: 15px;
+        background-color: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        border: 1px solid #eee;
+    }
+    
+    .legend-item {
+        display: flex;
+        align-items: center;
+        margin-right: 15px;
+        margin-bottom: 10px;
+    }
+    
+    .legend-color {
+        width: 16px;
+        height: 16px;
+        border-radius: 3px;
+        margin-right: 6px;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+    }
+    
+    .legend-text {
+        font-size: 0.9rem;
+        color: #495057;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .legend-task-title {
+        font-weight: 500;
+        margin-bottom: 2px;
+    }
+    
+    .legend-task-time {
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container timeline-page">
+    <div class="page-header">
+        <div class="d-flex align-items-center">
+            <a href="/focus_history?date={{ date }}" class="btn btn-outline-secondary back-button">
+                <i class="bi bi-arrow-left"></i> 返回
+            </a>
+            <h2>时间轴详细视图</h2>
+        </div>
+        
+        <!-- 日期选择器 -->
+        <div class="date-picker-container">
+            <div class="input-group">
+                <span class="input-group-text">
+                    <i class="bi bi-calendar3"></i>
+                </span>
+                <input type="text" class="form-control" id="date-picker" placeholder="选择日期" value="{{ date }}">
+            </div>
+        </div>
+    </div>
+    
+    <!-- 时间轴控制面板 -->
+    <div class="timeline-controls">
+        <div class="btn-group">
+            <button id="btn-today" class="btn btn-outline-primary" title="显示今天">
+                <i class="bi bi-calendar-check"></i> 今天
+            </button>
+            <button id="btn-fit-all" class="btn btn-outline-secondary" title="显示所有项目">
+                <i class="bi bi-arrows-fullscreen"></i> 适应窗口
+            </button>
+            <button id="btn-center" class="btn btn-outline-danger" title="滚动到当前时间">
+                <i class="bi bi-clock"></i> 当前时间
+            </button>
+        </div>
+        
+        <div class="btn-group">
+            <button id="btn-zoom-in" class="btn btn-outline-secondary" title="放大视图">
+                <i class="bi bi-zoom-in"></i>
+            </button>
+            <button id="btn-zoom-out" class="btn btn-outline-secondary" title="缩小视图">
+                <i class="bi bi-zoom-out"></i>
+            </button>
+        </div>
+        
+        <div class="btn-group">
+            <button id="btn-hour-view" class="btn btn-outline-secondary timeline-view-btn active" title="小时视图">
+                小时
+            </button>
+            <button id="btn-day-view" class="btn btn-outline-secondary timeline-view-btn" title="天视图">
+                天
+            </button>
+            <button id="btn-week-view" class="btn btn-outline-secondary timeline-view-btn" title="周视图">
+                周
+            </button>
+        </div>
+    </div>
+    
+    <!-- 时间轴容器 -->
+    <div id="visualization"></div>
+    
+    <!-- 任务颜色图例 -->
+    <div id="timeline-legend" class="timeline-legend"></div>
+    
+    <!-- 无数据提示 -->
+    <div id="no-data-alert" class="no-data-card mt-4" style="display: none;">
+        <div class="no-data-icon">
+            <i class="bi bi-calendar-x"></i>
+        </div>
+        <h4>当前日期没有专注记录</h4>
+        <p class="text-muted">请选择其他日期或返回专注历史页面</p>
+        <a href="/" class="btn btn-primary mt-2">返回首页</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/zh.js"></script>
+<!-- Vis.js Timeline库 -->
+<script src="https://cdn.jsdelivr.net/npm/vis-timeline@7.7.2/dist/vis-timeline-graph2d.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+<script>
+    // 全局变量
+    let timelineData;
+    let timeline = null;
+    let items = null;
+    let taskDurations = {};  // 用于存储每个任务的累计时长
+    
+    try {
+        timelineData = JSON.parse('{{ timeline_data | safe }}');
+        console.log("Timeline Data:", timelineData);
+    } catch (e) {
+        console.error("Error parsing JSON data:", e);
+        timelineData = [];
+    }
+    
+    // 格式化时间为 hh:mm:ss 格式
+    function formatTimeHMS(seconds) {
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    // 初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        // 初始化Flatpickr日期选择器
+        const datePicker = flatpickr("#date-picker", {
+            dateFormat: "Y-m-d",
+            locale: "zh",
+            defaultDate: "{{ date }}" || new Date(),
+            onChange: function(selectedDates, dateStr) {
+                window.location.href = `/timeline?date=${dateStr}`;
+            }
+        });
+        
+        // 处理并显示时间轴
+        initTimeline();
+        
+        // 绑定按钮事件
+        bindControlEvents();
+    });
+    
+    // 初始化时间轴
+    function initTimeline() {
+        if (!timelineData || timelineData.length === 0) {
+            console.log("没有时间轴数据");
+            document.getElementById('no-data-alert').style.display = 'block';
+            document.getElementById('visualization').style.display = 'none';
+            document.getElementById('timeline-legend').style.display = 'none';
+            return;
+        }
+        
+        // 解析选定的日期
+        const selectedDate = "{{ date }}" || new Date().toISOString().split('T')[0];
+        const dateObj = new Date(selectedDate);
+        
+        // 设置时间轴开始和结束时间
+        const start = new Date(dateObj);
+        start.setHours(0, 0, 0, 0);
+        
+        const end = new Date(dateObj);
+        end.setHours(23, 59, 59, 999);
+        
+        // 创建时间轴数据
+        items = new vis.DataSet();
+        
+        // 用于存储任务信息以生成图例
+        const taskInfo = {};
+        
+        // 转换时间数据
+        timelineData.forEach((item, index) => {
+            const startTime = new Date(item.start);
+            const endTime = new Date(item.end);
+            
+            // 添加到时间轴项目
+            items.add({
+                id: index,
+                content: "", // 不显示内容
+                title: createTooltipContent(item, startTime, endTime),
+                start: startTime,
+                end: endTime,
+                style: `background-color: ${item.color}; color: white;`,
+                taskId: item.task_id,
+                duration: item.duration,
+                className: 'timeline-empty-content' // 添加类以隐藏内容
+            });
+            
+            // 累计每个任务的总时长
+            if (!taskDurations[item.task_id]) {
+                taskDurations[item.task_id] = 0;
+                // 保存任务信息用于图例
+                taskInfo[item.task_id] = {
+                    title: item.task_title,
+                    color: item.color
+                };
+            }
+            taskDurations[item.task_id] += item.duration;
+        });
+        
+        // 配置时间轴选项
+        const options = {
+            orientation: 'top',
+            start: start,
+            end: end,
+            min: start,
+            max: end,
+            zoomMin: 1000 * 60 * 10,      // 最小缩放为10分钟
+            zoomMax: 1000 * 60 * 60 * 24,  // 最大缩放为24小时
+            stack: false,                  // 默认不堆叠
+            showCurrentTime: true,         // 显示当前时间指示器
+            format: {
+                minorLabels: {
+                    minute: 'HH:mm',
+                    hour: 'HH:mm'
+                },
+                majorLabels: {
+                    hour: 'HH:mm',
+                    day: 'M月D日 HH:mm'
+                }
+            },
+            timeAxis: { scale: 'hour', step: 1 },  // 默认按小时显示
+            margin: {
+                item: {
+                    horizontal: 5,  // 项目之间的水平间距
+                    vertical: 5     // 项目之间的垂直间距
+                }
+            },
+            tooltip: {
+                followMouse: true,
+                overflowMethod: 'cap'
+            },
+            onInitialDrawComplete: function() {
+                // 自定义时间轴完成绘制后的回调
+                console.log("时间轴初始化完成");
+                
+                // 检查是否为当天，如果是，则滚动到当前时间
+                const today = new Date().toISOString().split('T')[0];
+                if (selectedDate === today) {
+                    setTimeout(centerOnNow, 500);
+                }
+            }
+        };
+        
+        // 创建时间轴
+        const container = document.getElementById('visualization');
+        timeline = new vis.Timeline(container, items, options);
+        
+        // 绑定选择事件
+        timeline.on('select', function(properties) {
+            if (properties.items && properties.items.length > 0) {
+                const itemId = properties.items[0];
+                const item = items.get(itemId);
+                console.log("选中任务:", item);
+            }
+        });
+        
+        // 生成任务颜色图例
+        generateLegend(taskInfo);
+    }
+    
+    // 创建工具提示内容
+    function createTooltipContent(item, startTime, endTime) {
+        const formatTimeStr = (date) => {
+            return date.getHours().toString().padStart(2, '0') + ':' + 
+                   date.getMinutes().toString().padStart(2, '0');
+        };
+        
+        const durationStr = formatTimeHMS(item.duration);
+        
+        return `<div class="tooltip-title">${item.task_title}</div>
+                <div class="tooltip-time">${formatTimeStr(startTime)} - ${formatTimeStr(endTime)}</div>
+                <div class="tooltip-duration">时长: ${durationStr}</div>`;
+    }
+    
+    // 生成任务颜色图例
+    function generateLegend(taskInfo) {
+        const legendContainer = document.getElementById('timeline-legend');
+        legendContainer.innerHTML = '';
+        
+        // 根据任务ID排序
+        const sortedTaskIds = Object.keys(taskInfo).sort();
+        
+        sortedTaskIds.forEach(taskId => {
+            const task = taskInfo[taskId];
+            const totalDuration = taskDurations[taskId] || 0;
+            
+            const legendItem = document.createElement('div');
+            legendItem.className = 'legend-item';
+            
+            const colorBlock = document.createElement('div');
+            colorBlock.className = 'legend-color';
+            colorBlock.style.backgroundColor = task.color;
+            
+            const textDiv = document.createElement('div');
+            textDiv.className = 'legend-text';
+            
+            const titleSpan = document.createElement('span');
+            titleSpan.className = 'legend-task-title';
+            titleSpan.textContent = task.title;
+            
+            const timeSpan = document.createElement('span');
+            timeSpan.className = 'legend-task-time';
+            timeSpan.textContent = `总时长: ${formatTimeHMS(totalDuration)}`;
+            
+            textDiv.appendChild(titleSpan);
+            textDiv.appendChild(timeSpan);
+            
+            legendItem.appendChild(colorBlock);
+            legendItem.appendChild(textDiv);
+            
+            legendContainer.appendChild(legendItem);
+        });
+    }
+    
+    // 绑定控制按钮事件
+    function bindControlEvents() {
+        // 放大按钮
+        document.getElementById('btn-zoom-in').addEventListener('click', function() {
+            if (timeline) timeline.zoomIn(0.5);
+        });
+        
+        // 缩小按钮
+        document.getElementById('btn-zoom-out').addEventListener('click', function() {
+            if (timeline) timeline.zoomOut(0.5);
+        });
+        
+        // 适应窗口按钮
+        document.getElementById('btn-fit-all').addEventListener('click', function() {
+            if (timeline) timeline.fit();
+        });
+        
+        // 滚动到当前时间按钮
+        document.getElementById('btn-center').addEventListener('click', function() {
+            if (timeline) centerOnNow();
+        });
+        
+        // 今天按钮
+        document.getElementById('btn-today').addEventListener('click', function() {
+            const today = new Date().toISOString().split('T')[0];
+            window.location.href = `/timeline?date=${today}`;
+        });
+        
+        // 视图切换按钮
+        const viewButtons = document.querySelectorAll('.timeline-view-btn');
+        viewButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                // 移除所有按钮的active类
+                viewButtons.forEach(btn => btn.classList.remove('active'));
+                // 添加当前按钮的active类
+                this.classList.add('active');
+                
+                // 根据按钮ID切换视图
+                if (this.id === 'btn-hour-view' && timeline) {
+                    timeline.setOptions({
+                        timeAxis: { scale: 'hour', step: 1 },
+                        zoomMin: 1000 * 60 * 10  // 10分钟
+                    });
+                } else if (this.id === 'btn-day-view' && timeline) {
+                    timeline.setOptions({
+                        timeAxis: { scale: 'hour', step: 2 },
+                        zoomMin: 1000 * 60 * 30  // 30分钟
+                    });
+                    timeline.zoomOut(0.5);
+                } else if (this.id === 'btn-week-view' && timeline) {
+                    timeline.setOptions({
+                        timeAxis: { scale: 'hour', step: 4 },
+                        zoomMin: 1000 * 60 * 60  // 1小时
+                    });
+                    timeline.zoomOut(1);
+                }
+            });
+        });
+    }
+    
+    // 滚动到当前时间
+    function centerOnNow() {
+        if (!timeline) return;
+        
+        const now = new Date();
+        timeline.moveTo(now);
+    }
+</script>
+{% endblock %} 

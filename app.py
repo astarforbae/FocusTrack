@@ -1025,5 +1025,156 @@ def edit_summary(task_id):
     
     return render_template('edit_summary.html', task=task)
 
+@app.route('/timeline')
+def timeline():
+    # 获取日期参数，默认为今天
+    date_str = request.args.get('date')
+    if not date_str:  # 如果日期参数为空，使用当天日期
+        date_str = datetime.now().strftime("%Y-%m-%d")
+    
+    # 使用缓存减少重复计算
+    if not hasattr(manager, 'timeline_cache'):
+        manager.timeline_cache = {}
+    
+    # 检查缓存是否有效
+    sessions_last_modified = getattr(manager, 'sessions_last_modified', None)
+    current_modified = manager.sessions_hash
+    if sessions_last_modified != current_modified:
+        # 清除缓存
+        manager.timeline_cache = {}
+        manager.sessions_last_modified = current_modified
+    
+    # 尝试从缓存获取结果
+    if date_str in manager.timeline_cache:
+        cache_data = manager.timeline_cache[date_str]
+        return render_template('timeline.html', 
+                             date=date_str,
+                             timeline_data=json.dumps(cache_data['timeline_data']))
+    
+    # 获取该日期的所有专注会话
+    sessions = manager.get_sessions_by_date(date_str)
+    
+    # 预先解析日期字符串，避免重复解析
+    if not date_str:
+        # 如果日期为空，使用当天日期
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        date_obj = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        try:
+            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+        except ValueError:
+            # 如果日期格式无效，使用当天日期
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            date_obj = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # 按任务ID分组并计算每个任务的专注时间
+    task_times = {}
+    task_sessions = {}
+    task_colors = {}
+    
+    # 创建一个基于任务总数的预定义颜色列表
+    def generate_distinct_colors(num_tasks):
+        """生成足够多的不同颜色，使用均匀分布的HSL色调"""
+        colors = []
+        for i in range(num_tasks):
+            # 计算均匀分布的色调值，确保最大色调差异
+            hue = int(i * (360 / max(1, num_tasks))) % 360
+            # 随机调整饱和度和亮度，保持颜色鲜艳
+            saturation = 70 + (hash(str(i)) % 20)
+            lightness = 40 + (hash(str(i + 100)) % 20)
+            colors.append(f"hsl({hue}, {saturation}%, {lightness}%)")
+        return colors
+    
+    # 先获取任务ID列表
+    distinct_task_ids = []
+    for session in sessions:
+        if session.end_time and not session.abandoned:
+            task_id = session.task_id
+            if task_id not in distinct_task_ids:
+                distinct_task_ids.append(task_id)
+    
+    # 为每个任务生成唯一颜色
+    distinct_colors = generate_distinct_colors(len(distinct_task_ids))
+    task_color_map = {task_id: distinct_colors[i] for i, task_id in enumerate(distinct_task_ids)}
+    
+    for session in sessions:
+        if session.end_time and not session.abandoned:  # 只统计已结束且未放弃的会话
+            task_id = session.task_id
+            if task_id not in task_times:
+                task_times[task_id] = 0
+                task_sessions[task_id] = []
+                # 使用预先生成的唯一颜色
+                task_colors[task_id] = task_color_map.get(task_id, f"hsl({hash(task_id) % 360}, 70%, 50%)")  # 后面的是备用方案
+            
+            task_times[task_id] += session.duration
+            task_sessions[task_id].append(session)
+    
+    # 获取任务详情
+    tasks_data = []
+    
+    for task_id, time_spent in task_times.items():
+        task = manager.get_task_by_id(task_id)
+        if task:
+            task_data = task.to_dict()
+            task_data['focus_time'] = time_spent
+            task_data['focus_time_str'] = task.format_time(time_spent)
+            task_data['sessions'] = []
+            task_data['color'] = task_colors[task_id]
+            
+            # 添加会话详情
+            for session in task_sessions[task_id]:
+                start_time_str = session.start_time.strftime("%H:%M:%S")
+                end_time_str = session.end_time.strftime("%H:%M:%S") if session.end_time else ""
+                
+                session_data = {
+                    'id': session.id,
+                    'start_time': start_time_str,
+                    'end_time': end_time_str,
+                    'duration': session.duration,
+                    'duration_str': task.format_time(session.duration)
+                }
+                task_data['sessions'].append(session_data)
+            
+            tasks_data.append(task_data)
+    
+    # 准备时间轴数据
+    timeline_data = []
+    
+    for task in tasks_data:
+        for session in task['sessions']:
+            if session['start_time'] and session['end_time']:
+                try:
+                    # 组合日期和时间
+                    start = datetime.combine(date_obj.date(), 
+                                           datetime.strptime(session['start_time'], "%H:%M:%S").time())
+                    end = datetime.combine(date_obj.date(),
+                                         datetime.strptime(session['end_time'], "%H:%M:%S").time())
+                    
+                    # 处理跨日的情况
+                    if end < start:
+                        end = end + timedelta(days=1)
+                    
+                    timeline_data.append({
+                        'task_id': task['id'],
+                        'task_title': task['title'],
+                        'start': start.strftime("%Y-%m-%d %H:%M:%S"),
+                        'end': end.strftime("%Y-%m-%d %H:%M:%S"),
+                        'duration': session['duration'],
+                        'color': task['color']
+                    })
+                except (ValueError, TypeError) as e:
+                    app.logger.error(f"Error processing session: {e}")
+                    # 跳过有问题的会话
+                    continue
+    
+    # 保存到缓存
+    manager.timeline_cache[date_str] = {
+        'timeline_data': timeline_data
+    }
+    
+    return render_template('timeline.html', 
+                          date=date_str,
+                          timeline_data=json.dumps(timeline_data))
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=12345, debug=True)
