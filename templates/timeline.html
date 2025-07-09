@@ -311,6 +311,9 @@
             <button id="btn-center" class="btn btn-outline-danger" title="滚动到当前时间">
                 <i class="bi bi-clock"></i> 当前时间
             </button>
+            <button id="btn-toggle-all-history" class="btn btn-outline-success" title="切换查看所有历史数据">
+                <i class="bi bi-clock-history"></i> <span id="toggle-history-text">查看所有历史</span>
+            </button>
         </div>
         
         <div class="btn-group">
@@ -365,6 +368,7 @@
     let timeline = null;
     let items = null;
     let taskDurations = {};  // 用于存储每个任务的累计时长
+    let showAllHistory = false;  // 默认只显示当前日期的数据
     
     try {
         timelineData = JSON.parse('{{ timeline_data | safe }}');
@@ -410,8 +414,32 @@
             return;
         }
         
+        // 获取选定的日期
+        const selectedDate = "{{ date }}" || new Date().toISOString().split('T')[0];
+        
+        // 筛选数据
+        let dataToAnalyze;
+        if (showAllHistory) {
+            dataToAnalyze = [...timelineData]; // 分析所有历史数据
+        } else {
+            // 筛选当前选中日期的数据
+            dataToAnalyze = timelineData.filter(item => {
+                const sessionDate = item.start.split(' ')[0];
+                return sessionDate === selectedDate;
+            });
+        }
+        
+        if (dataToAnalyze.length === 0) {
+            // 如果没有数据，显示默认值
+            document.getElementById('max-interval-value').textContent = '--:--:--';
+            document.getElementById('avg-duration-value').textContent = '--:--:--';
+            document.getElementById('focus-efficiency-value').textContent = '--%';
+            document.getElementById('focus-sessions-value').textContent = '0';
+            return;
+        }
+        
         // 按开始时间排序
-        const sortedData = [...timelineData].sort((a, b) => {
+        const sortedData = [...dataToAnalyze].sort((a, b) => {
             return new Date(a.start) - new Date(b.start);
         });
         
@@ -472,12 +500,59 @@
         const selectedDate = "{{ date }}" || new Date().toISOString().split('T')[0];
         const dateObj = new Date(selectedDate);
         
-        // 设置时间轴开始和结束时间
-        const start = new Date(dateObj);
-        start.setHours(0, 0, 0, 0);
+        // 重置任务时长累计
+        taskDurations = {};
         
-        const end = new Date(dateObj);
-        end.setHours(23, 59, 59, 999);
+        // 筛选数据
+        let dataToShow;
+        if (showAllHistory) {
+            dataToShow = [...timelineData]; // 显示所有历史数据
+        } else {
+            // 筛选当前选中日期的数据
+            dataToShow = timelineData.filter(item => {
+                // 检查会话日期是否与选定日期匹配
+                const sessionDate = item.start.split(' ')[0];
+                return sessionDate === selectedDate;
+            });
+        }
+        
+        // 检查是否存在数据
+        if (dataToShow.length === 0) {
+            console.log(showAllHistory ? "没有专注记录" : "所选日期没有专注记录");
+            document.getElementById('no-data-alert').style.display = 'block';
+            document.getElementById('visualization').style.display = 'none';
+            document.getElementById('timeline-legend').style.display = 'none';
+            document.getElementById('focus-stats').style.display = 'none';
+            return;
+        } else {
+            document.getElementById('no-data-alert').style.display = 'none';
+            document.getElementById('visualization').style.display = 'block';
+            document.getElementById('timeline-legend').style.display = 'flex';
+            document.getElementById('focus-stats').style.display = 'flex';
+        }
+        
+        // 设置时间轴开始和结束时间
+        let start, end;
+        
+        if (showAllHistory && dataToShow.length > 0) {
+            // 如果显示所有历史，则根据数据的起止时间设置范围
+            const sortedByStart = [...dataToShow].sort((a, b) => new Date(a.start) - new Date(b.start));
+            const sortedByEnd = [...dataToShow].sort((a, b) => new Date(b.end) - new Date(a.end));
+            
+            start = new Date(sortedByStart[0].start);
+            end = new Date(sortedByEnd[0].end);
+            
+            // 扩展一点时间范围，让视图更美观
+            start.setHours(start.getHours() - 1);
+            end.setHours(end.getHours() + 1);
+        } else {
+            // 如果只显示当天，则设置为当天的起止时间
+            start = new Date(dateObj);
+            start.setHours(0, 0, 0, 0);
+            
+            end = new Date(dateObj);
+            end.setHours(23, 59, 59, 999);
+        }
         
         // 创建时间轴数据
         items = new vis.DataSet();
@@ -485,8 +560,8 @@
         // 用于存储任务信息以生成图例
         const taskInfo = {};
         
-        // 转换时间数据
-        timelineData.forEach((item, index) => {
+        // 转换数据
+        dataToShow.forEach((item, index) => {
             const startTime = new Date(item.start);
             const endTime = new Date(item.end);
             
@@ -520,20 +595,24 @@
             orientation: 'top',
             start: start,
             end: end,
-            min: start,
-            max: end,
+            min: showAllHistory ? null : start,  // 如果显示所有历史，则不限制最小时间
+            max: showAllHistory ? null : end,    // 如果显示所有历史，则不限制最大时间
             zoomMin: 1000 * 60 * 10,      // 最小缩放为10分钟
-            zoomMax: 1000 * 60 * 60 * 24,  // 最大缩放为24小时
+            zoomMax: showAllHistory ? 1000 * 60 * 60 * 24 * 30 : 1000 * 60 * 60 * 24,  // 根据模式调整最大缩放
             stack: false,                  // 默认不堆叠
             showCurrentTime: true,         // 显示当前时间指示器
             format: {
                 minorLabels: {
                     minute: 'HH:mm',
-                    hour: 'HH:mm'
+                    hour: 'HH:mm',
+                    day: 'M/D',
+                    month: 'YYYY/M'
                 },
                 majorLabels: {
-                    hour: 'HH:mm',
-                    day: 'M月D日 HH:mm'
+                    hour: 'M月D日 HH:mm',
+                    day: 'YYYY年M月D日',
+                    month: 'YYYY年',
+                    year: ''
                 }
             },
             timeAxis: { scale: 'hour', step: 1 },  // 默认按小时显示
@@ -551,9 +630,9 @@
                 // 自定义时间轴完成绘制后的回调
                 console.log("时间轴初始化完成");
                 
-                // 检查是否为当天，如果是，则滚动到当前时间
+                // 检查是否为当天且不是显示所有历史模式，如果是，则滚动到当前时间
                 const today = new Date().toISOString().split('T')[0];
-                if (selectedDate === today) {
+                if (selectedDate === today && !showAllHistory) {
                     setTimeout(centerOnNow, 500);
                 }
             }
@@ -574,6 +653,9 @@
         
         // 生成任务颜色图例
         generateLegend(taskInfo);
+        
+        // 更新统计数据
+        calculateStats();
     }
     
     // 创建工具提示内容
@@ -656,6 +738,19 @@
         document.getElementById('btn-today').addEventListener('click', function() {
             const today = new Date().toISOString().split('T')[0];
             window.location.href = `/timeline?date=${today}`;
+        });
+        
+        // 切换历史数据按钮
+        document.getElementById('btn-toggle-all-history').addEventListener('click', function() {
+            // 切换模式
+            showAllHistory = !showAllHistory;
+            
+            // 更新按钮文本
+            document.getElementById('toggle-history-text').textContent = 
+                showAllHistory ? '仅查看当前日期' : '查看所有历史';
+            
+            // 重新初始化时间轴
+            initTimeline();
         });
         
         // 视图切换按钮

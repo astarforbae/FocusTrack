@@ -1045,27 +1045,20 @@ def timeline():
         manager.sessions_last_modified = current_modified
     
     # 尝试从缓存获取结果
-    if date_str in manager.timeline_cache:
-        cache_data = manager.timeline_cache[date_str]
+    cache_key = 'all_sessions'  # 使用固定的缓存键，因为我们要获取所有会话
+    if cache_key in manager.timeline_cache:
+        cache_data = manager.timeline_cache[cache_key]
         return render_template('timeline.html', 
                              date=date_str,
                              timeline_data=json.dumps(cache_data['timeline_data']))
     
-    # 获取该日期的所有专注会话
-    sessions = manager.get_sessions_by_date(date_str)
+    # 获取所有专注会话，而不仅仅是指定日期的会话
+    sessions = manager.focus_sessions
     
     # 预先解析日期字符串，避免重复解析
     if not date_str:
         # 如果日期为空，使用当天日期
         date_str = datetime.now().strftime("%Y-%m-%d")
-        date_obj = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    else:
-        try:
-            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
-        except ValueError:
-            # 如果日期格式无效，使用当天日期
-            date_str = datetime.now().strftime("%Y-%m-%d")
-            date_obj = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     
     # 按任务ID分组并计算每个任务的专注时间
     task_times = {}
@@ -1123,12 +1116,21 @@ def timeline():
             
             # 添加会话详情
             for session in task_sessions[task_id]:
+                # 格式化日期和时间
+                start_date_str = session.start_time.strftime("%Y-%m-%d")
                 start_time_str = session.start_time.strftime("%H:%M:%S")
-                end_time_str = session.end_time.strftime("%H:%M:%S") if session.end_time else ""
+                
+                end_date_str = ""
+                end_time_str = ""
+                if session.end_time:
+                    end_date_str = session.end_time.strftime("%Y-%m-%d")
+                    end_time_str = session.end_time.strftime("%H:%M:%S")
                 
                 session_data = {
                     'id': session.id,
+                    'start_date': start_date_str,
                     'start_time': start_time_str,
+                    'end_date': end_date_str,
                     'end_time': end_time_str,
                     'duration': session.duration,
                     'duration_str': task.format_time(session.duration)
@@ -1144,11 +1146,16 @@ def timeline():
         for session in task['sessions']:
             if session['start_time'] and session['end_time']:
                 try:
-                    # 组合日期和时间
-                    start = datetime.combine(date_obj.date(), 
-                                           datetime.strptime(session['start_time'], "%H:%M:%S").time())
-                    end = datetime.combine(date_obj.date(),
-                                         datetime.strptime(session['end_time'], "%H:%M:%S").time())
+                    # 使用完整日期和时间
+                    start = datetime.strptime(
+                        f"{session['start_date']} {session['start_time']}",
+                        "%Y-%m-%d %H:%M:%S"
+                    )
+                    
+                    end = datetime.strptime(
+                        f"{session['end_date']} {session['end_time']}",
+                        "%Y-%m-%d %H:%M:%S"
+                    )
                     
                     # 处理跨日的情况
                     if end < start:
@@ -1160,7 +1167,8 @@ def timeline():
                         'start': start.strftime("%Y-%m-%d %H:%M:%S"),
                         'end': end.strftime("%Y-%m-%d %H:%M:%S"),
                         'duration': session['duration'],
-                        'color': task['color']
+                        'color': task['color'],
+                        'date': session['start_date']  # 添加日期信息方便前端筛选
                     })
                 except (ValueError, TypeError) as e:
                     app.logger.error(f"Error processing session: {e}")
@@ -1168,7 +1176,7 @@ def timeline():
                     continue
     
     # 保存到缓存
-    manager.timeline_cache[date_str] = {
+    manager.timeline_cache[cache_key] = {
         'timeline_data': timeline_data
     }
     
