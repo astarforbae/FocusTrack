@@ -34,137 +34,6 @@
         margin-bottom: 20px;
     }
     
-    /* 时间轴样式 */
-    .timeline-container {
-        position: relative;
-        margin: 20px 0;
-        padding-left: 50px; /* 为小时刻度留出空间 */
-        height: 500px; /* 设置固定高度 */
-        overflow-y: auto; /* 添加垂直滚动条 */
-        border: 1px solid #eee;
-        background-color: #ffffff;
-    }
-    
-    /* 时间轴刻度样式 */
-    .timeline-hours-container {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 50px;
-        height: 100%;
-        z-index: 10;
-        background-color: #f8f9fa;
-        border-right: 1px solid #dee2e6;
-        pointer-events: none; /* 防止刻度阻挡滚动 */
-    }
-    .timeline-hour-marker {
-        position: absolute;
-        width: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: flex-end;
-        padding-right: 10px;
-        font-size: 0.8rem;
-        color: #6c757d;
-        box-sizing: border-box;
-        height: 20px; /* 固定高度 */
-        margin-top: -10px; /* 垂直居中 */
-    }
-    .timeline-hour-marker::after {
-        content: '';
-        position: absolute;
-        width: 10px;
-        height: 1px;
-        background-color: #dee2e6;
-        right: -1px;
-        top: 50%;
-    }
-    
-    /* 时间轴线 */
-    .timeline-line {
-        width: 100%;
-        background-color: transparent;
-        position: relative;
-        min-height: 100%;
-    }
-    
-    /* 时间轴网格线 */
-    .timeline-grid-line {
-        position: absolute;
-        left: 0;
-        width: 100%;
-        height: 1px;
-        background-color: rgba(0,0,0,0.05);
-        pointer-events: none; /* 防止网格线阻挡交互 */
-    }
-    .timeline-half-hour {
-        border-top: 1px dashed rgba(0,0,0,0.03);
-        height: 0;
-    }
-    
-    /* 任务块样式 */
-    .timeline-task {
-        position: absolute;
-        left: 0;
-        width: calc(100% - 20px);
-        border-radius: 4px;
-        color: white;
-        font-size: 0.8rem;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        padding: 5px 10px;
-        cursor: pointer;
-        box-sizing: border-box;
-        margin-left: 10px;
-        border-left: 4px solid rgba(0,0,0,0.2);
-        z-index: 5;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        transition: all 0.2s;
-        overflow: hidden; /* 防止内容溢出 */
-        transform-origin: left center; /* 设置变换原点 */
-    }
-    .timeline-task:hover {
-        z-index: 100;
-        box-shadow: 0 3px 6px rgba(0, 0, 0, 0.2);
-        transform: translateX(3px);
-        transition: all 0.2s ease;
-    }
-    .timeline-task-content {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        width: 100%;
-        font-weight: 500;
-    }
-    .timeline-task-time {
-        font-size: 0.7rem;
-        opacity: 0.8;
-        margin-top: 2px;
-        white-space: nowrap; /* 防止时间信息换行 */
-    }
-    
-    /* 当前时间指示器 */
-    .timeline-now-indicator {
-        position: absolute;
-        left: 0;
-        width: 100%;
-        height: 2px;
-        background-color: #dc3545;
-        z-index: 20;
-    }
-    .timeline-now-label {
-        position: absolute;
-        left: -50px;
-        transform: translateY(-50%);
-        background-color: #dc3545;
-        color: white;
-        padding: 2px 6px;
-        border-radius: 3px;
-        font-size: 0.7rem;
-        z-index: 21;
-    }
-    
     /* 表格样式 */
     .focus-table th, .focus-table td {
         vertical-align: middle;
@@ -240,46 +109,6 @@
         justify-content: flex-end;
         gap: 10px;
     }
-    
-    /* 时间轴缩放控制 */
-    .timeline-controls {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 10px;
-        background-color: #f8f9fa;
-        border-bottom: 1px solid #dee2e6;
-    }
-    .timeline-zoom-controls {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-    .zoom-slider {
-        width: 150px;
-    }
-    .timeline-info {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-    }
-    .timeline-view-options {
-        display: flex;
-        gap: 10px;
-    }
-    .timeline-view-option {
-        padding: 4px 8px;
-        border-radius: 4px;
-        background-color: #e9ecef;
-        cursor: pointer;
-        font-size: 0.8rem;
-        transition: all 0.2s;
-    }
-    .timeline-view-option:hover,
-    .timeline-view-option.active {
-        background-color: #0d6efd;
-        color: white;
-    }
 </style>
 {% endblock %}
 
@@ -351,34 +180,19 @@
             </div>
         </div>
         <div class="col-md-6">
-            <div class="card">
+            <div class="card h-100">
                 <div class="card-header">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">时间轴视图</h5>
-                        <a href="/timeline?date={{ date }}" class="btn btn-sm btn-primary">
-                            <i class="bi bi-fullscreen"></i> 查看详细时间轴
-                        </a>
-                    </div>
+                    <h5 class="mb-0">时间轴</h5>
                 </div>
-                <div class="timeline-controls">
-                    <div class="timeline-zoom-controls">
-                        <button id="zoom-out" class="btn btn-sm btn-outline-secondary" title="缩小视图">
-                            <i class="bi bi-zoom-out"></i>
-                        </button>
-                        <input type="range" id="zoom-slider" class="zoom-slider" min="2" max="10" value="3" title="调整缩放级别">
-                        <button id="zoom-in" class="btn btn-sm btn-outline-secondary" title="放大视图">
-                            <i class="bi bi-zoom-in"></i>
-                        </button>
+                <div class="card-body d-flex flex-column justify-content-center align-items-center">
+                    <div class="mb-3 text-center">
+                        <i class="bi bi-clock-history text-primary" style="font-size: 3rem;"></i>
                     </div>
-                    <div class="timeline-info">
-                        <small class="text-muted">拖动滑块调整缩放比例</small>
-                        <small class="text-muted">方块高度与专注时长成正比</small>
-                    </div>
-                </div>
-                <div class="card-body p-0">
-                    <div id="timeline-container" class="timeline-container">
-                        <!-- 时间轴将通过JavaScript动态生成 -->
-                    </div>
+                    <h5 class="mb-3 text-center">查看专注时间轴</h5>
+                    <p class="text-muted text-center mb-4">在详细时间轴视图中可以直观地查看一天中所有专注活动的分布</p>
+                    <a href="/timeline?date={{ date }}" class="btn btn-primary">
+                        <i class="bi bi-fullscreen me-2"></i> 查看详细时间轴
+                    </a>
                 </div>
             </div>
         </div>
@@ -436,11 +250,10 @@
 <script>
     // 全局变量
     let tasks = {{ tasks | tojson }};
-    let chartData, timelineData;
+    let chartData;
     
     try {
         chartData = JSON.parse('{{ chart_data | safe }}');
-        timelineData = JSON.parse('{{ timeline_data | safe }}');
         
         // 调试输出每个任务的属性
         if (chartData && chartData.length > 0) {
@@ -452,18 +265,14 @@
     } catch (e) {
         console.error("Error parsing JSON data:", e);
         chartData = [];
-        timelineData = [];
     }
     
     let pieChart = null;
     let currentSessionId = null; // 当前要删除的会话ID
-    let currentZoomLevel = 3; // 默认缩放级别
-    let maxDuration = 0; // 最长的专注时长，用于计算相对大小
     
     // 调试信息
     console.log("Tasks:", tasks);
     console.log("Chart Data:", chartData);
-    console.log("Timeline Data:", timelineData);
     
     // 格式化时间为 hh:mm:ss 格式
     function formatTimeHMS(seconds) {
@@ -490,23 +299,11 @@
         
         // 初始化确认删除对话框
         initDeleteDialog();
-        
-        // 初始化时间轴控制
-        initTimelineControls();
     });
     
     // 处理并显示所有数据
     function processAndDisplayData() {
         console.log("开始处理数据...");
-        
-        // 确保缩放级别不小于2
-        if (currentZoomLevel < 2) {
-            currentZoomLevel = 2;
-            const zoomSlider = document.getElementById('zoom-slider');
-            if (zoomSlider) {
-                zoomSlider.value = currentZoomLevel;
-            }
-        }
         
         // 检查任务数据
         if (!tasks || tasks.length === 0) {
@@ -518,19 +315,8 @@
         console.log(`任务数据: ${tasks.length} 个任务`);
         
         try {
-            // 计算最长的专注时长
-            if (timelineData && timelineData.length > 0) {
-                maxDuration = Math.max(...timelineData.map(item => item.duration));
-                console.log(`最长专注时长: ${maxDuration} 秒`);
-            } else {
-                console.log("没有时间轴数据");
-            }
-            
             // 生成饼图
             generatePieChart();
-            
-            // 生成时间轴
-            generateTimeline();
             
             // 填充表格数据
             populateTable();
@@ -540,50 +326,6 @@
             console.error("处理数据时出错:", error);
             document.getElementById('no-data-alert').style.display = 'block';
         }
-    }
-    
-    // 初始化时间轴控制
-    function initTimelineControls() {
-        // 缩小按钮
-        document.getElementById('zoom-out').addEventListener('click', function() {
-            if (visTimeline) {
-                visTimeline.zoomOut(0.5);
-            }
-        });
-        
-        // 放大按钮
-        document.getElementById('zoom-in').addEventListener('click', function() {
-            if (visTimeline) {
-                visTimeline.zoomIn(0.5);
-            }
-        });
-        
-        // 适应所有数据按钮
-        document.getElementById('fit-all').addEventListener('click', function() {
-            if (visTimeline) {
-                visTimeline.fit();
-            }
-        });
-    }
-    
-    // 滚动到当前时间
-    function scrollToCurrentTime() {
-        const now = new Date();
-        const currentHour = now.getHours();
-        const currentMinute = now.getMinutes();
-        
-        const container = document.getElementById('timeline-container');
-        const timelineHeight = container.scrollHeight;
-        
-        // 计算当前时间在时间轴上的位置
-        const dayProgress = (currentHour * 60 + currentMinute) / (24 * 60);
-        const scrollPosition = timelineHeight * dayProgress - (container.clientHeight / 2);
-        
-        // 平滑滚动到当前时间
-        container.scrollTo({
-            top: Math.max(0, scrollPosition),
-            behavior: 'smooth'
-        });
     }
     
     // 生成饼图
@@ -693,218 +435,6 @@
                 }
             }
         });
-    }
-    
-    // 生成时间轴
-    function generateTimeline() {
-        // 确保缩放级别不小于2
-        if (currentZoomLevel < 2) {
-            currentZoomLevel = 2;
-            const zoomSlider = document.getElementById('zoom-slider');
-            if (zoomSlider) {
-                zoomSlider.value = currentZoomLevel;
-            }
-        }
-        
-        const container = document.getElementById('timeline-container');
-        container.innerHTML = '';
-        
-        // 设置时间轴高度，根据缩放级别调整
-        const baseHeight = 500; // 基础高度
-        const zoomFactor = currentZoomLevel * 0.5; // 缩放因子
-        const timelineHeight = baseHeight * zoomFactor;
-        
-        // 创建时间轴线
-        const timelineLine = document.createElement('div');
-        timelineLine.className = 'timeline-line';
-        timelineLine.style.height = `${timelineHeight}px`;
-        container.appendChild(timelineLine);
-        
-        // 创建动态时间刻度容器
-        const timelineHoursContainer = document.createElement('div');
-        timelineHoursContainer.className = 'timeline-hours-container';
-        timelineHoursContainer.style.height = `${timelineHeight}px`;
-        
-        // 添加24小时刻度
-        for (let i = 0; i <= 24; i++) {
-            // 只显示0-23小时的刻度
-            if (i < 24) {
-                const hourMarker = document.createElement('div');
-                hourMarker.className = 'timeline-hour-marker';
-                hourMarker.textContent = `${i}:00`;
-                
-                // 计算刻度位置 - 精确定位到时间轴上的对应位置
-                const positionPercent = (i / 24) * 100;
-                hourMarker.style.top = `${positionPercent}%`;
-                
-                timelineHoursContainer.appendChild(hourMarker);
-            }
-            
-            // 添加网格线（包括24:00的线）
-            const gridLine = document.createElement('div');
-            gridLine.className = 'timeline-grid-line';
-            
-            // 计算网格线位置
-            const positionPercent = (i / 24) * 100;
-            gridLine.style.top = `${positionPercent}%`;
-            
-            // 整点的线条更明显
-            gridLine.style.backgroundColor = i % 1 === 0 ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.05)';
-            
-            timelineLine.appendChild(gridLine);
-            
-            // 添加半小时线
-            if (i < 24) {
-                const halfHourLine = document.createElement('div');
-                halfHourLine.className = 'timeline-grid-line timeline-half-hour';
-                
-                const halfHourPercent = ((i + 0.5) / 24) * 100;
-                halfHourLine.style.top = `${halfHourPercent}%`;
-                halfHourLine.style.backgroundColor = 'rgba(0,0,0,0.03)';
-                halfHourLine.style.borderStyle = 'dashed';
-                
-                timelineLine.appendChild(halfHourLine);
-            }
-        }
-        
-        container.appendChild(timelineHoursContainer);
-        
-        // 添加当前时间指示器（仅当选择的是今天时）
-        const selectedDate = "{{ date }}";
-        const today = new Date().toISOString().split('T')[0];
-        
-        if (selectedDate === today) {
-            const now = new Date();
-            const currentHour = now.getHours();
-            const currentMinute = now.getMinutes();
-            const currentSecond = now.getSeconds();
-            
-            const totalSeconds = currentHour * 3600 + currentMinute * 60 + currentSecond;
-            const dayTotalSeconds = 24 * 3600; // 一天总秒数
-            const nowPercent = (totalSeconds / dayTotalSeconds) * 100;
-            
-            const nowIndicator = document.createElement('div');
-            nowIndicator.className = 'timeline-now-indicator';
-            nowIndicator.style.top = `${nowPercent}%`;
-            
-            const nowLabel = document.createElement('div');
-            nowLabel.className = 'timeline-now-label';
-            nowLabel.textContent = '现在';
-            nowLabel.style.top = `${nowPercent}%`;
-            
-            timelineLine.appendChild(nowIndicator);
-            timelineLine.appendChild(nowLabel);
-        }
-        
-        // 添加任务块到时间轴
-        if (timelineData && timelineData.length > 0) {
-            timelineData.forEach(item => {
-                const startTime = new Date(item.start);
-                const endTime = new Date(item.end);
-                
-                // 计算开始和结束时间对应的秒数（相对于当天0点）
-                const startHours = startTime.getHours();
-                const startMinutes = startTime.getMinutes();
-                const startSeconds = startTime.getSeconds();
-                const startTotalSeconds = startHours * 3600 + startMinutes * 60 + startSeconds;
-                
-                const endHours = endTime.getHours();
-                const endMinutes = endTime.getMinutes();
-                const endSeconds = endTime.getSeconds();
-                const endTotalSeconds = endHours * 3600 + endMinutes * 60 + endSeconds;
-                
-                // 一天总秒数
-                const dayTotalSeconds = 24 * 3600;
-                
-                // 计算在时间轴上的精确位置（百分比）
-                const startPercent = (startTotalSeconds / dayTotalSeconds) * 100;
-                const endPercent = (endTotalSeconds / dayTotalSeconds) * 100;
-                
-                // 创建任务块
-                const taskBlock = document.createElement('div');
-                taskBlock.className = 'timeline-task';
-                
-                // 精确设置任务块的位置
-                // 上边缘与开始时间对齐
-                taskBlock.style.top = `${startPercent}%`;
-                
-                // 设置高度与专注时长成正比，而非按时间轴比例
-                const minHeight = 1.5; // 最小高度百分比
-                let actualHeight;
-                
-                if (maxDuration > 0) {
-                    // 计算基于时长的高度（最小5%，最大40%）
-                    const durationBasedHeight = 5 + ((item.duration / maxDuration) * 35);
-                    actualHeight = durationBasedHeight;
-                } else {
-                    // 如果没有最大时长参考，退回到基于时间差的计算
-                    const heightPercent = endPercent - startPercent;
-                    actualHeight = Math.max(heightPercent, minHeight);
-                }
-                
-                taskBlock.style.height = `${actualHeight}%`;
-                
-                // 设置任务块颜色
-                taskBlock.style.backgroundColor = item.color;
-                
-                // 保持宽度相同，但根据专注时长调整其他样式
-                // 固定宽度为80%
-                taskBlock.style.width = '80%';
-                
-                if (maxDuration > 0) {
-                    // 根据时长设置左边框宽度，时长越长边框越粗
-                    const borderWidth = 2 + ((item.duration / maxDuration) * 8);
-                    taskBlock.style.borderLeftWidth = `${borderWidth}px`;
-                    
-                    // 设置z-index，时长越长层级越高
-                    const zIndex = 5 + Math.floor((item.duration / maxDuration) * 10);
-                    taskBlock.style.zIndex = zIndex;
-                    
-                    // 根据时长设置阴影，时长越长阴影越明显
-                    const shadowSize = 1 + Math.floor((item.duration / maxDuration) * 5);
-                    taskBlock.style.boxShadow = `0 ${shadowSize}px ${shadowSize * 2}px rgba(0,0,0,0.2)`;
-                    
-                    // 根据时长设置字体大小，时长越长字体越大
-                    const fontSize = 0.8 + ((item.duration / maxDuration) * 0.2);
-                    taskBlock.style.fontSize = `${fontSize}rem`;
-                }
-                
-                // 创建任务内容
-                const taskContent = document.createElement('div');
-                taskContent.className = 'timeline-task-content';
-                taskContent.textContent = item.task_title;
-                
-                // 创建时间信息
-                const taskTime = document.createElement('div');
-                taskTime.className = 'timeline-task-time';
-                
-                // 计算时长
-                const hours = Math.floor(item.duration / 3600);
-                const minutes = Math.floor((item.duration % 3600) / 60);
-                const durationText = hours > 0 ? `${hours}h${minutes}m` : `${minutes}m`;
-                
-                // 格式化时间显示
-                const formatTime = (date) => {
-                    return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
-                };
-                
-                taskTime.textContent = `${formatTime(startTime)} - ${formatTime(endTime)} (${formatTimeHMS(item.duration)})`;
-                
-                // 添加工具提示
-                taskBlock.title = `${item.task_title}\n${formatTime(startTime)} - ${formatTime(endTime)}\n时长: ${formatTimeHMS(item.duration)}`;
-                
-                // 如果高度足够，显示任务名称和时间
-                if (actualHeight > 3) {
-                    taskBlock.appendChild(taskContent);
-                    
-                    if (actualHeight > 5) {
-                        taskBlock.appendChild(taskTime);
-                    }
-                }
-                
-                timelineLine.appendChild(taskBlock);
-            });
-        }
     }
     
     // 填充表格数据
