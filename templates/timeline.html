@@ -36,11 +36,11 @@
     
     /* 时间轴容器样式 */
     #visualization {
-        height: 600px;
+        height: 100px;
         border: 1px solid #eee;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
         border-radius: 8px;
-        margin-bottom: 20px;
+        margin-bottom: 5px;
     }
     
     /* 自定义 vis.js 时间轴样式 */
@@ -159,9 +159,9 @@
         display: flex;
         flex-wrap: wrap;
         gap: 10px;
-        margin-top: 20px;
+        margin-top: 0;
         margin-bottom: 20px;
-        padding: 15px;
+        padding: 10px 15px;
         background-color: #fff;
         border-radius: 8px;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
@@ -199,6 +199,47 @@
         font-size: 0.8rem;
         color: #6c757d;
     }
+    
+    /* 统计卡片样式 */
+    .stats-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        margin-bottom: 15px;
+    }
+    
+    .stat-card {
+        flex: 1;
+        min-width: 200px;
+        background-color: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        border: 1px solid #eee;
+        padding: 15px;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    
+    .stat-icon {
+        font-size: 1.8rem;
+        margin-bottom: 10px;
+        color: #0d6efd;
+    }
+    
+    .stat-value {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 5px;
+    }
+    
+    .stat-label {
+        font-size: 0.9rem;
+        color: #6c757d;
+    }
 </style>
 {% endblock %}
 
@@ -220,6 +261,41 @@
                 </span>
                 <input type="text" class="form-control" id="date-picker" placeholder="选择日期" value="{{ date }}">
             </div>
+        </div>
+    </div>
+    
+    <!-- 专注统计数据卡片 -->
+    <div class="stats-row" id="focus-stats">
+        <div class="stat-card">
+            <div class="stat-icon">
+                <i class="bi bi-clock-history"></i>
+            </div>
+            <div class="stat-value" id="max-interval-value">--:--:--</div>
+            <div class="stat-label">最长休息间隔</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-icon">
+                <i class="bi bi-stopwatch"></i>
+            </div>
+            <div class="stat-value" id="avg-duration-value">--:--:--</div>
+            <div class="stat-label">平均专注时长</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-icon">
+                <i class="bi bi-lightning-charge"></i>
+            </div>
+            <div class="stat-value" id="focus-efficiency-value">--%</div>
+            <div class="stat-label">专注效率</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-icon">
+                <i class="bi bi-check2-circle"></i>
+            </div>
+            <div class="stat-value" id="focus-sessions-value">0</div>
+            <div class="stat-label">专注次数</div>
         </div>
     </div>
     
@@ -323,7 +399,63 @@
         
         // 绑定按钮事件
         bindControlEvents();
+        
+        // 计算和显示统计数据
+        calculateStats();
     });
+    
+    // 计算统计数据
+    function calculateStats() {
+        if (!timelineData || timelineData.length === 0) {
+            return;
+        }
+        
+        // 按开始时间排序
+        const sortedData = [...timelineData].sort((a, b) => {
+            return new Date(a.start) - new Date(b.start);
+        });
+        
+        // 计算最长休息间隔
+        let maxInterval = 0;
+        let maxIntervalStart = null;
+        let maxIntervalEnd = null;
+        
+        for (let i = 0; i < sortedData.length - 1; i++) {
+            const currentEnd = new Date(sortedData[i].end);
+            const nextStart = new Date(sortedData[i+1].start);
+            
+            const interval = (nextStart - currentEnd) / 1000; // 转换为秒
+            if (interval > maxInterval) {
+                maxInterval = interval;
+                maxIntervalStart = currentEnd;
+                maxIntervalEnd = nextStart;
+            }
+        }
+        
+        // 计算平均专注时长
+        const totalDuration = sortedData.reduce((sum, item) => sum + item.duration, 0);
+        const avgDuration = sortedData.length > 0 ? totalDuration / sortedData.length : 0;
+        
+        // 计算专注效率
+        // 专注效率 = 总专注时间 / (最后一条记录结束时间 - 第一条记录开始时间)
+        let focusEfficiency = 0;
+        if (sortedData.length > 0) {
+            const firstStart = new Date(sortedData[0].start);
+            const lastEnd = new Date(sortedData[sortedData.length - 1].end);
+            const totalTimeSpan = (lastEnd - firstStart) / 1000; // 转换为秒
+            
+            if (totalTimeSpan > 0) {
+                focusEfficiency = (totalDuration / totalTimeSpan) * 100;
+            }
+        }
+        
+        // 更新统计卡片显示
+        document.getElementById('max-interval-value').textContent = formatTimeHMS(maxInterval);
+        document.getElementById('avg-duration-value').textContent = formatTimeHMS(avgDuration);
+        document.getElementById('focus-efficiency-value').textContent = 
+            focusEfficiency > 0 ? `${focusEfficiency.toFixed(1)}%` : '0%';
+        document.getElementById('focus-sessions-value').textContent = sortedData.length;
+    }
     
     // 初始化时间轴
     function initTimeline() {
@@ -332,6 +464,7 @@
             document.getElementById('no-data-alert').style.display = 'block';
             document.getElementById('visualization').style.display = 'none';
             document.getElementById('timeline-legend').style.display = 'none';
+            document.getElementById('focus-stats').style.display = 'none';
             return;
         }
         
