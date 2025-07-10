@@ -1032,26 +1032,25 @@ def timeline():
     if not date_str:  # 如果日期参数为空，使用当天日期
         date_str = datetime.now().strftime("%Y-%m-%d")
     
-    # 使用缓存减少重复计算
-    if not hasattr(manager, 'timeline_cache'):
-        manager.timeline_cache = {}
+    # 获取客户端时间戳参数
+    client_timestamp = request.args.get('timestamp')
     
-    # 检查缓存是否有效
-    sessions_last_modified = getattr(manager, 'sessions_last_modified', None)
-    current_modified = manager.sessions_hash
-    if sessions_last_modified != current_modified:
-        # 清除缓存
-        manager.timeline_cache = {}
-        manager.sessions_last_modified = current_modified
+    # 生成当前时间戳
+    timestamp = int(time.time())
     
-    # 尝试从缓存获取结果
-    cache_key = 'all_sessions'  # 使用固定的缓存键，因为我们要获取所有会话
-    if cache_key in manager.timeline_cache:
-        cache_data = manager.timeline_cache[cache_key]
-        return render_template('timeline.html', 
-                             date=date_str,
-                             timeline_data=json.dumps(cache_data['timeline_data']))
+    # 如果是AJAX请求检查更新（带有时间戳参数）
+    if client_timestamp:
+        # 检查focus_sessions.json文件的修改时间
+        try:
+            file_mtime = os.path.getmtime(SESSIONS_FILE)
+            # 如果文件修改时间晚于客户端时间戳，需要返回新数据
+            if int(file_mtime) > int(client_timestamp):
+                # 强制重新加载会话数据
+                manager.load_sessions()
+        except (OSError, ValueError) as e:
+            app.logger.error(f"Error checking file modification time: {e}")
     
+    # 总是获取最新的会话数据，不使用缓存
     # 获取所有专注会话，而不仅仅是指定日期的会话
     sessions = manager.focus_sessions
     
@@ -1175,13 +1174,12 @@ def timeline():
                     # 跳过有问题的会话
                     continue
     
-    # 保存到缓存
-    manager.timeline_cache[cache_key] = {
-        'timeline_data': timeline_data
-    }
+    # 添加时间戳到时间轴数据中，方便前端检测更新
+    timestamp = int(time.time())
     
     return render_template('timeline.html', 
                           date=date_str,
+                          timestamp=timestamp,
                           timeline_data=json.dumps(timeline_data))
 
 if __name__ == '__main__':

@@ -314,6 +314,9 @@
             <button id="btn-toggle-all-history" class="btn btn-outline-success" title="切换查看所有历史数据">
                 <i class="bi bi-clock-history"></i> <span id="toggle-history-text">查看所有历史</span>
             </button>
+            <button id="btn-refresh" class="btn btn-outline-info" title="刷新时间轴数据">
+                <i class="bi bi-arrow-clockwise"></i> 刷新数据
+            </button>
         </div>
         
         <div class="btn-group">
@@ -369,10 +372,15 @@
     let items = null;
     let taskDurations = {};  // 用于存储每个任务的累计时长
     let showAllHistory = false;  // 默认只显示当前日期的数据
+    let lastTimestamp = "{{ timestamp|default('0') }}";  // 存储上次数据时间戳
+    let autoRefreshInterval = null; // 自动刷新定时器
     
     try {
         timelineData = JSON.parse('{{ timeline_data | safe }}');
         console.log("Timeline Data:", timelineData);
+        // 获取时间戳
+        lastTimestamp = "{{ timestamp|default('0') }}";
+        console.log("Current timestamp:", lastTimestamp);
     } catch (e) {
         console.error("Error parsing JSON data:", e);
         timelineData = [];
@@ -406,7 +414,65 @@
         
         // 计算和显示统计数据
         calculateStats();
+        
+        // 启动自动刷新
+        startAutoRefresh();
     });
+    
+    // 自动刷新功能
+    function startAutoRefresh() {
+        // 每10秒检查一次新数据
+        autoRefreshInterval = setInterval(checkForUpdates, 5000);
+    }
+    
+    // 检查后端数据更新
+    function checkForUpdates() {
+        // 获取当前选中日期
+        const selectedDate = document.getElementById('date-picker').value || "{{ date }}";
+        
+        // 发送AJAX请求检查是否有新数据
+        fetch(`/timeline?date=${selectedDate}&timestamp=${lastTimestamp}`)
+            .then(response => response.text())
+            .then(html => {
+                // 从HTML中提取时间戳和数据
+                const timestampMatch = html.match(/"timestamp":(\d+)/);
+                const dataMatch = html.match(/timelineData = JSON\.parse\('(.+?)'\);/s);
+                
+                if (timestampMatch && timestampMatch[1]) {
+                    const newTimestamp = timestampMatch[1];
+                    
+                    // 如果时间戳不同，说明有新数据
+                    if (newTimestamp !== lastTimestamp && dataMatch && dataMatch[1]) {
+                        console.log("检测到新数据，刷新时间轴");
+                        try {
+                            const newTimelineData = JSON.parse(dataMatch[1].replace(/&quot;/g, '"'));
+                            timelineData = newTimelineData;
+                            lastTimestamp = newTimestamp;
+                            
+                            // 重新初始化时间轴
+                            if (timeline) {
+                                // 保存当前时间轴的窗口范围，以便在刷新后恢复
+                                const currentWindow = {
+                                    start: timeline.getWindow().start,
+                                    end: timeline.getWindow().end
+                                };
+                                
+                                // 重新初始化时间轴
+                                initTimeline();
+                                
+                                // 恢复之前的窗口范围
+                                timeline.setWindow(currentWindow.start, currentWindow.end);
+                            }
+                        } catch (e) {
+                            console.error("解析新数据时出错:", e);
+                        }
+                    }
+                }
+            })
+            .catch(error => {
+                console.error("检查更新时出错:", error);
+            });
+    }
     
     // 计算统计数据
     function calculateStats() {
@@ -751,6 +817,11 @@
             
             // 重新初始化时间轴
             initTimeline();
+        });
+        
+        // 手动刷新按钮
+        document.getElementById('btn-refresh').addEventListener('click', function() {
+            checkForUpdates();
         });
         
         // 视图切换按钮
