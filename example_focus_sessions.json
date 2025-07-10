@@ -1,0 +1,20 @@
+{
+    "sessions": [
+        {
+            "id": "example1",
+            "task_id": "example1",
+            "start_time": "2024-01-01 09:00:00",
+            "end_time": "2024-01-01 09:45:00",
+            "duration": 2700,
+            "status": "completed"
+        },
+        {
+            "id": "example2",
+            "task_id": "example1",
+            "start_time": "2024-01-01 10:00:00",
+            "end_time": null,
+            "duration": 0,
+            "status": "in_progress"
+        }
+    ]
+} 

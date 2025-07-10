@@ -1,0 +1,26 @@
+{
+    "tasks": [
+        {
+            "id": "example1",
+            "title": "完成项目文档",
+            "description": "编写项目的技术文档和用户指南",
+            "priority": "高",
+            "tags": ["文档", "开发"],
+            "status": "进行中",
+            "created_time": "2024-01-01 09:00:00",
+            "expected_time": 120,
+            "time_spent": 45
+        },
+        {
+            "id": "example2",
+            "title": "代码重构",
+            "description": "优化核心模块的代码结构",
+            "priority": "中",
+            "tags": ["开发", "优化"],
+            "status": "未开始",
+            "created_time": "2024-01-01 10:00:00",
+            "expected_time": 180,
+            "time_spent": 0
+        }
+    ]
+} 
