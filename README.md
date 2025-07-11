@@ -22,6 +22,12 @@ pip install -r requirements.txt
 
 ## 使用方法
 
+### 初始化数据文件
+
+首次使用前，请将示例数据文件重命名为正确的名称：
+- 将 `example_tasks.json` 重命名为 `tasks.json`
+- 将 `example_focus_sessions.json` 重命名为 `focus_sessions.json`
+
 ### 启动服务器
 
 ```bash
