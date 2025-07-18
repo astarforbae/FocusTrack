@@ -75,7 +75,11 @@ class FocusSession:
 
     def end_session(self):
         self.end_time = datetime.now()
+        # 确保duration计算正确，使用整数秒数
         self.duration = int((self.end_time - self.start_time).total_seconds())
+        # 确保duration不为负数
+        if self.duration < 0:
+            self.duration = 0
 
     def to_dict(self):
         return {

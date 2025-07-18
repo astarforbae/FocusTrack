@@ -32,6 +32,13 @@ class TimeManager:
         self.sessions_file = SESSIONS_FILE
         self.tasks_hash = None  # 添加哈希值用于检测更改
         self.sessions_hash = None  # 添加哈希值用于检测更改
+        # 初始化缓存
+        self.focus_history_cache = {}
+        self.sessions_by_date_cache = {}
+        self.task_time_cache = {}
+        # 初始化缓存哈希值
+        self.sessions_date_cache_hash = None
+        self.task_time_cache_hash = None
         self.load_tasks()
         self.load_sessions()
 
@@ -152,11 +159,23 @@ class TimeManager:
                 with open(self.sessions_file, "r", encoding="utf-8") as f:
                     sessions_data = json.load(f)
                     self.focus_sessions = [FocusSession.from_dict(session_data) for session_data in sessions_data]
-                    # 初始化哈希值
+                    # 更新哈希值
                     self.sessions_hash = hash(json.dumps(sessions_data, sort_keys=True))
+                    
+                    # 清除所有相关缓存
+                    if hasattr(self, 'sessions_by_date_cache'):
+                        self.sessions_by_date_cache.clear()
+                    if hasattr(self, 'task_time_cache'):
+                        self.task_time_cache.clear()
+                    if hasattr(self, 'focus_history_cache'):
+                        self.focus_history_cache.clear()
+                        
             except json.JSONDecodeError:
                 self.focus_sessions = []
                 self.sessions_hash = hash("[]")
+        else:
+            self.focus_sessions = []
+            self.sessions_hash = hash("[]")
 
     def get_tasks(self):
         return self.tasks
@@ -759,13 +778,11 @@ def end_focus(task_id):
         # 设置会话放弃状态
         active_session.abandoned = abandoned
         
-        # 结束会话
+        # 结束会话 - 让end_session方法自动计算duration
         session = manager.end_focus_session(active_session.id)
         
-        # 如果会话没有被放弃，使用前端发送的时间更新会话时长
-        if not abandoned and elapsed_time > 0:
-            session.duration = elapsed_time
-            manager.save_sessions()
+        # 不再使用前端发送的elapsed_time覆盖duration
+        # 完全依赖后端的时间计算，确保数据一致性
         
         return jsonify({'success': True})
     except Exception as e:
@@ -776,32 +793,19 @@ def end_focus(task_id):
 def focus_history():
     # 获取日期参数，默认为今天
     date_str = request.args.get('date')
-    if not date_str:  # 如果日期参数为空，使用当天日期
+    if not date_str:
         date_str = datetime.now().strftime("%Y-%m-%d")
     
-    # 使用缓存减少重复计算
-    if not hasattr(manager, 'focus_history_cache'):
-        manager.focus_history_cache = {}
+    # 强制重新加载会话数据，确保数据实时性
+    manager.load_sessions()
     
-    # 检查缓存是否有效
-    sessions_last_modified = getattr(manager, 'sessions_last_modified', None)
-    current_modified = manager.sessions_hash
-    if sessions_last_modified != current_modified:
-        # 清除缓存
-        manager.focus_history_cache = {}
-        manager.sessions_last_modified = current_modified
-    
-    # 尝试从缓存获取结果
-    if date_str in manager.focus_history_cache:
-        cache_data = manager.focus_history_cache[date_str]
-        return render_template('focus_history.html', 
-                             date=date_str,
-                             tasks=cache_data['tasks_data'], 
-                             total_focus_time_str=cache_data['total_focus_time_str'],
-                             total_tasks=cache_data['total_tasks'], 
-                             completed_tasks=cache_data['completed_tasks'],
-                             chart_data=json.dumps(cache_data['chart_data']),
-                             timeline_data=json.dumps(cache_data['timeline_data']))
+    # 清除相关缓存，确保使用最新数据
+    if hasattr(manager, 'focus_history_cache'):
+        manager.focus_history_cache.clear()
+    if hasattr(manager, 'sessions_by_date_cache'):
+        manager.sessions_by_date_cache.clear()
+    if hasattr(manager, 'task_time_cache'):
+        manager.task_time_cache.clear()
     
     # 获取该日期的所有专注会话
     sessions = manager.get_sessions_by_date(date_str)
