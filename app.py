@@ -234,6 +234,27 @@ class TimeManager:
                 return True
         return False
 
+    def batch_delete_focus_sessions(self, session_ids):
+        """批量删除专注会话"""
+        deleted_count = 0
+        # 从后往前删除，避免索引变化问题
+        for i in range(len(self.focus_sessions) - 1, -1, -1):
+            if self.focus_sessions[i].id in session_ids:
+                del self.focus_sessions[i]
+                deleted_count += 1
+
+        if deleted_count > 0:
+            self.save_sessions()
+            # 清除相关缓存
+            if hasattr(self, 'focus_history_cache'):
+                self.focus_history_cache.clear()
+            if hasattr(self, 'sessions_by_date_cache'):
+                self.sessions_by_date_cache.clear()
+            if hasattr(self, 'task_time_cache'):
+                self.task_time_cache.clear()
+
+        return deleted_count
+
 manager = TimeManager()
 
 class SearchIndex:
@@ -673,22 +694,10 @@ def start_timer(task_id):
 
 @app.route('/stop_timer/<task_id>', methods=['POST'])
 def stop_timer(task_id):
-    task = manager.get_task_by_id(task_id)
-    if task:
-        # We no longer need to update total_time here
-        # Just start a focus session instead
-        data = request.get_json()
-        duration_seconds = data.get('duration', 0)  # 获取前端发送的计时时间（秒）
-        
-        # Create a focus session for this timer
-        session = FocusSession(task_id)
-        session.end_time = datetime.now()
-        session.duration = duration_seconds
-        manager.focus_sessions.append(session)
-        manager.save_sessions()
-        
-        return jsonify({'success': True})
-    return jsonify({'success': False})
+    # This route is deprecated and no longer used by the frontend
+    # The frontend now uses /end_focus instead
+    # Keeping this for backward compatibility
+    return jsonify({'success': True, 'message': 'This route is deprecated, use /end_focus instead'})
 
 @app.route('/search', methods=['GET'])
 def search():
@@ -777,12 +786,18 @@ def end_focus(task_id):
         
         # 设置会话放弃状态
         active_session.abandoned = abandoned
-        
-        # 结束会话 - 让end_session方法自动计算duration
-        session = manager.end_focus_session(active_session.id)
-        
-        # 不再使用前端发送的elapsed_time覆盖duration
-        # 完全依赖后端的时间计算，确保数据一致性
+
+        # 使用前端发送的elapsed_time作为实际专注时间
+        # 这更准确地反映用户的实际专注时间
+        end_time = datetime.now()
+        start_time = end_time - timedelta(seconds=elapsed_time)
+
+        active_session.start_time = start_time
+        active_session.end_time = end_time
+        active_session.duration = elapsed_time
+
+        # 保存会话数据
+        manager.save_sessions()
         
         return jsonify({'success': True})
     except Exception as e:
@@ -1002,6 +1017,36 @@ def delete_focus_session(session_id):
         # focus_history路由会处理空日期的情况
         return jsonify({'success': True, 'redirect': f'/focus_history?date={date_str}'})
     return jsonify({'success': False, 'error': '找不到指定的专注会话'}), 404
+
+@app.route('/batch_delete_focus_sessions', methods=['POST'])
+def batch_delete_focus_sessions():
+    """批量删除专注会话的路由"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': '缺少请求数据'}), 400
+
+        session_ids = data.get('session_ids', [])
+        date_str = data.get('date', '')
+
+        if not session_ids:
+            return jsonify({'success': False, 'error': '没有选择要删除的会话'}), 400
+
+        # 执行批量删除
+        deleted_count = manager.batch_delete_focus_sessions(session_ids)
+
+        if deleted_count > 0:
+            return jsonify({
+                'success': True,
+                'message': f'成功删除 {deleted_count} 条专注记录',
+                'redirect': f'/focus_history?date={date_str}'
+            })
+        else:
+            return jsonify({'success': False, 'error': '没有找到要删除的专注会话'}), 404
+
+    except Exception as e:
+        app.logger.error(f'批量删除专注会话时出错: {str(e)}')
+        return jsonify({'success': False, 'error': '删除失败，请稍后重试'}), 500
 
 @app.route('/view_summary/<task_id>')
 def view_summary(task_id):

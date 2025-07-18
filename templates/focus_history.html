@@ -89,6 +89,25 @@
         color: #bd2130;
         transform: scale(1.1);
     }
+
+    /* 批量操作样式 */
+    .batch-operations {
+        margin-bottom: 15px;
+        padding: 10px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+        display: none;
+    }
+    .batch-operations.show {
+        display: block;
+    }
+    .checkbox-column {
+        width: 40px;
+        text-align: center;
+    }
+    .session-checkbox {
+        cursor: pointer;
+    }
     
     /* 确认对话框样式 */
     .confirm-dialog {
@@ -233,10 +252,26 @@
             <h5 class="mb-0">专注详细数据</h5>
         </div>
         <div class="card-body">
+            <!-- 批量操作工具栏 -->
+            <div class="batch-operations" id="batch-operations">
+                <div class="d-flex align-items-center">
+                    <span class="me-3">已选择 <span id="selected-count">0</span> 项</span>
+                    <button class="btn btn-danger btn-sm" id="batch-delete-btn">
+                        <i class="bi bi-trash"></i> 批量删除
+                    </button>
+                    <button class="btn btn-secondary btn-sm ms-2" id="cancel-selection-btn">
+                        取消选择
+                    </button>
+                </div>
+            </div>
+
             <div class="table-responsive">
                 <table class="table table-hover focus-table" id="focus-table">
                     <thead>
                         <tr>
+                            <th class="checkbox-column">
+                                <input type="checkbox" id="select-all-checkbox" class="form-check-input">
+                            </th>
                             <th class="sortable" data-sort="task">任务名称 <i class="bi bi-sort-alpha-down sort-icon"></i></th>
                             <th class="sortable" data-sort="start">开始时间 <i class="bi bi-sort-alpha-down sort-icon"></i></th>
                             <th class="sortable" data-sort="end">结束时间 <i class="bi bi-sort-alpha-down sort-icon"></i></th>
@@ -331,6 +366,9 @@
         
         // 初始化排序功能
         initSorting();
+
+        // 初始化批量操作事件监听器
+        initBatchOperations();
     });
     
     // 排序相关变量
@@ -412,32 +450,44 @@
             
             switch (sortType) {
                 case 'task':
-                    valueA = a.cells[0].textContent.trim();
-                    valueB = b.cells[0].textContent.trim();
+                    // 任务名称现在是第1列（因为第0列是复选框）
+                    // 使用数据属性获取纯文本任务名称，避免颜色标记的干扰
+                    valueA = a.cells[1].getAttribute('data-task-name') || a.cells[1].textContent.trim();
+                    valueB = b.cells[1].getAttribute('data-task-name') || b.cells[1].textContent.trim();
                     return ascending ? valueA.localeCompare(valueB) : valueB.localeCompare(valueA);
-                    
+
                 case 'start':
-                    valueA = a.cells[1].textContent.trim();
-                    valueB = b.cells[1].textContent.trim();
-                    return ascending ? valueA.localeCompare(valueB) : valueB.localeCompare(valueA);
-                    
-                case 'end':
+                    // 开始时间现在是第2列
                     valueA = a.cells[2].textContent.trim();
                     valueB = b.cells[2].textContent.trim();
+                    // 将时间字符串 HH:MM:SS 转换为秒数进行比较
+                    const startSecondsA = timeToSeconds(valueA);
+                    const startSecondsB = timeToSeconds(valueB);
+                    return ascending ? startSecondsA - startSecondsB : startSecondsB - startSecondsA;
+
+                case 'end':
+                    // 结束时间现在是第3列
+                    valueA = a.cells[3].textContent.trim();
+                    valueB = b.cells[3].textContent.trim();
                     // 处理"进行中"的特殊情况
-                    if (valueA === '进行中') valueA = '99:99:99';
-                    if (valueB === '进行中') valueB = '99:99:99';
-                    return ascending ? valueA.localeCompare(valueB) : valueB.localeCompare(valueA);
-                    
+                    if (valueA === '进行中' && valueB === '进行中') return 0;
+                    if (valueA === '进行中') return ascending ? 1 : -1;
+                    if (valueB === '进行中') return ascending ? -1 : 1;
+                    // 将时间字符串 HH:MM:SS 转换为秒数进行比较
+                    const endSecondsA = timeToSeconds(valueA);
+                    const endSecondsB = timeToSeconds(valueB);
+                    return ascending ? endSecondsA - endSecondsB : endSecondsB - endSecondsA;
+
                 case 'duration':
-                    // 将时间格式 HH:MM:SS 转换为秒数进行比较
-                    valueA = timeToSeconds(a.cells[3].textContent.trim());
-                    valueB = timeToSeconds(b.cells[3].textContent.trim());
+                    // 专注时长现在是第4列
+                    valueA = timeToSeconds(a.cells[4].textContent.trim());
+                    valueB = timeToSeconds(b.cells[4].textContent.trim());
                     return ascending ? valueA - valueB : valueB - valueA;
-                    
+
                 case 'status':
-                    valueA = a.cells[4].textContent.trim();
-                    valueB = b.cells[4].textContent.trim();
+                    // 状态现在是第5列
+                    valueA = a.cells[5].textContent.trim();
+                    valueB = b.cells[5].textContent.trim();
                     return ascending ? valueA.localeCompare(valueB) : valueB.localeCompare(valueA);
                     
                 default:
@@ -613,18 +663,29 @@
             
             task.sessions.forEach(session => {
                 const row = document.createElement('tr');
-                
+                row.setAttribute('data-session-id', session.id);
+
+                // 复选框单元格
+                const checkboxCell = document.createElement('td');
+                checkboxCell.className = 'checkbox-column';
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'form-check-input session-checkbox';
+                checkbox.setAttribute('data-session-id', session.id);
+                checkbox.addEventListener('change', updateBatchOperations);
+                checkboxCell.appendChild(checkbox);
+                row.appendChild(checkboxCell);
+
                 // 任务名称单元格
                 const taskCell = document.createElement('td');
-                taskCell.textContent = task.title;
-                
+
                 // 添加彩色标记
                 const colorMark = document.createElement('span');
                 colorMark.style.display = 'inline-block';
                 colorMark.style.width = '12px';
                 colorMark.style.height = '12px';
                 colorMark.style.borderRadius = '50%';
-                
+
                 // 查找任务对应的颜色
                 let taskColor = '#4e73df';
                 if (chartData && chartData.length > 0) {
@@ -635,8 +696,17 @@
                 }
                 colorMark.style.backgroundColor = taskColor;
                 colorMark.style.marginRight = '8px';
-                
-                taskCell.prepend(colorMark);
+
+                // 创建任务名称文本节点
+                const taskText = document.createElement('span');
+                taskText.textContent = task.title;
+
+                // 添加颜色标记和任务名称
+                taskCell.appendChild(colorMark);
+                taskCell.appendChild(taskText);
+
+                // 为排序添加数据属性
+                taskCell.setAttribute('data-task-name', task.title);
                 row.appendChild(taskCell);
                 
                 // 开始时间单元格
@@ -761,6 +831,118 @@
             console.error('Error:', error);
             alert('删除失败，请稍后重试');
             hideDeleteConfirmation();
+        });
+    }
+
+    // 初始化批量操作事件监听器
+    function initBatchOperations() {
+        // 全选复选框事件
+        const selectAllCheckbox = document.getElementById('select-all-checkbox');
+        selectAllCheckbox.addEventListener('change', toggleSelectAll);
+
+        // 批量删除按钮事件
+        const batchDeleteBtn = document.getElementById('batch-delete-btn');
+        batchDeleteBtn.addEventListener('click', batchDeleteSessions);
+
+        // 取消选择按钮事件
+        const cancelSelectionBtn = document.getElementById('cancel-selection-btn');
+        cancelSelectionBtn.addEventListener('click', cancelSelection);
+    }
+
+    // 批量操作相关函数
+    function updateBatchOperations() {
+        const checkboxes = document.querySelectorAll('.session-checkbox');
+        const checkedBoxes = document.querySelectorAll('.session-checkbox:checked');
+        const batchOperations = document.getElementById('batch-operations');
+        const selectedCount = document.getElementById('selected-count');
+        const selectAllCheckbox = document.getElementById('select-all-checkbox');
+
+        // 更新选中数量
+        selectedCount.textContent = checkedBoxes.length;
+
+        // 显示或隐藏批量操作工具栏
+        if (checkedBoxes.length > 0) {
+            batchOperations.classList.add('show');
+        } else {
+            batchOperations.classList.remove('show');
+        }
+
+        // 更新全选复选框状态
+        if (checkedBoxes.length === 0) {
+            selectAllCheckbox.indeterminate = false;
+            selectAllCheckbox.checked = false;
+        } else if (checkedBoxes.length === checkboxes.length) {
+            selectAllCheckbox.indeterminate = false;
+            selectAllCheckbox.checked = true;
+        } else {
+            selectAllCheckbox.indeterminate = true;
+        }
+    }
+
+    function toggleSelectAll() {
+        const selectAllCheckbox = document.getElementById('select-all-checkbox');
+        const checkboxes = document.querySelectorAll('.session-checkbox');
+
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = selectAllCheckbox.checked;
+        });
+
+        updateBatchOperations();
+    }
+
+    function cancelSelection() {
+        const checkboxes = document.querySelectorAll('.session-checkbox');
+        const selectAllCheckbox = document.getElementById('select-all-checkbox');
+
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = false;
+        });
+        selectAllCheckbox.checked = false;
+        selectAllCheckbox.indeterminate = false;
+
+        updateBatchOperations();
+    }
+
+    function batchDeleteSessions() {
+        const checkedBoxes = document.querySelectorAll('.session-checkbox:checked');
+        const sessionIds = Array.from(checkedBoxes).map(checkbox => checkbox.getAttribute('data-session-id'));
+
+        if (sessionIds.length === 0) {
+            alert('请先选择要删除的专注记录');
+            return;
+        }
+
+        if (!confirm(`确定要删除选中的 ${sessionIds.length} 条专注记录吗？此操作不可撤销。`)) {
+            return;
+        }
+
+        // 获取当前日期参数
+        const urlParams = new URLSearchParams(window.location.search);
+        const dateParam = urlParams.get('date') || '';
+
+        // 发送批量删除请求
+        fetch('/batch_delete_focus_sessions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                session_ids: sessionIds,
+                date: dateParam
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // 重新加载页面
+                window.location.href = data.redirect;
+            } else {
+                alert('批量删除失败: ' + (data.error || '未知错误'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('批量删除失败，请稍后重试');
         });
     }
 
